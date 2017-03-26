@@ -13,6 +13,8 @@ data Aexp = N Num | V Var | Mult Aexp Aexp | Add Aexp Aexp | Sub Aexp Aexp
 data Bexp = TRUE | FALSE | Neg Bexp | And Bexp Bexp | Eq Aexp Aexp | Le Aexp Aexp
     deriving (Show, Eq, Read)
 
+data Stm = Ass Var Aexp | Skip | Comp Stm Stm | If Bexp Stm Stm | While Bexp Stm
+    deriving (Show, Eq, Read)
 
 n_val::Num -> Z
 n_val n = n
@@ -51,5 +53,27 @@ a = Mult (Add(V "x")(V "y")) (Sub(V "z")(N 1))
 
 b::Bexp
 b = (Neg TRUE)
+
+
+update::State->Z->Var->State
+update s i v = (\v' -> if (v == v') then i else ( s v' ) )
+
+cond :: ( a->T, a->a, a->a ) ->( a->a )
+cond (b, s1, s2) x  = if (b x) then (s1 x) else (s2 x)
+
+fix :: ((State->State)->(State->State))->(State->State)
+fix ff = ff (fix ff)
+
+s_ds::Stm->State->State
+s_ds ( Ass v a ) s    = update s (a_val a s) v
+s_ds ( Skip ) s       = s
+s_ds ( Comp s1 s2 ) s = s_ds s2 (s_ds s1 s)
+s_ds ( If b s1 s2 ) s = undefined
+s_ds ( While b s1 ) s = undefined
+
+
+--ss Var Aexp | Skip | Comp Stm Stm |
+--               If Bexp Stm Stm | While Bexp Stm
+
 
 main = putStrLn $ "hi"
