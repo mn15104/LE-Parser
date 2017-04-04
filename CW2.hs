@@ -50,16 +50,9 @@ semi       = Token.semi       lexer -- parses a semicolon
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
 
--- PARSING FUNCTION --
 
-parse' :: String -> Stm
-parse' str =
-     case parse procParser "" str of
-       Left e  -> error $ show e
-       Right r -> r
 
--- ""(Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y"(Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1))))))"
-
+--"(Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y"(Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))"
 
 -- AEXP --
 
@@ -105,32 +98,35 @@ procParser = whiteSpace >> stm
 
 stm :: Parser Stm
 stm =   parens stm
-          <|> comp
+          <|> seqstm
           <|> block
 
-comp :: Parser Stm
-comp =
-   do s1 <- stm'
-      reserved ";"
-      s2 <- stm'
-      return $ Comp s1 s2
+seqstm :: Parser Stm -- separate the statements at the ; into Comp S1 S2
+seqstm =
+ do list <- (sepBy1 stm' semi)
+    return $ is_semi list
+
+is_semi :: [Stm] -> Stm
+is_semi [] = error "error"
+is_semi [x] = x
+is_semi (x:xs) = Comp x (is_semi xs)
 
 stm' :: Parser Stm
-stm' =      ifStm
-           <|> whileStm
-           <|> skipStm
-           <|> assignStm
-           <|> block
+stm' =      skipStm
            <|> call
+           <|> block
+           <|> ifStm
+           <|> whileStm
+           <|> assignStm
 
-var :: Parser Var
-var = many1(oneOf ['A' .. 'Z'] <|> oneOf ['a' .. 'z']) <* whiteSpace
+-- var :: Parser Var
+-- var = many1(oneOf ['A' .. 'Z'] <|> oneOf ['a' .. 'z']) <* whiteSpace
 
 whitespace :: Parser ()
 whitespace = many (oneOf "\ \t \n") *> pure ()
 
 assignStm :: Parser Stm
-assignStm = Ass <$> var <* reservedOp ":=" <*> aExp
+assignStm = Ass <$> identifier <* reservedOp ":=" <*> aExp
 
 ifStm :: Parser Stm
 ifStm = If <$ reserved "if" <*> bExp <* reserved "then" <*> stm <* reserved "else" <*> stm
@@ -139,15 +135,18 @@ whileStm :: Parser Stm
 whileStm = While <$ reserved "while" <*> bExp <* reserved "do" <*> stm
 
 skipStm :: Parser Stm
-skipStm = Skip <$ reserved "skip"
+skipStm = Skip <$ reserved "skip" <* whiteSpace
 
 block :: Parser Stm
 block = Block <$ reserved "begin" <*> vDec <*> pDec <*> stm <* reserved "end"
 
+call :: Parser Stm
+call = Call <$ reserved "call" <*> identifier
+
 vDec :: Parser [(Var,Aexp)]
 vDec = many vDec'
    where vDec' = do reserved "var"
-                    v <- var
+                    v <- identifier
                     reservedOp ":="
                     expr <- aExp
                     reservedOp ";"
@@ -156,11 +155,19 @@ vDec = many vDec'
 pDec :: Parser [(Pname,Stm)]
 pDec = many pDec'
   where pDec' = do reserved "proc"
-                   prog <- var
+                   prog <- identifier
                    reserved "is"
                    s <- stm'
                    reservedOp ";"
                    return $ (prog, s)
 
-call :: Parser Stm
-call = Call <$ reserved "call" <*> var
+
+
+-- "/*fac_loop (p.23)*/\ny:=1;\nwhile !(x=1) do (\n y:=y*x;\n x:=x-1\n)"
+-- PARSING FUNCTION --
+
+parse' :: String -> Stm
+parse' str =
+     case parse procParser "" str of
+       Left e  -> error $ show e
+       Right r -> r
