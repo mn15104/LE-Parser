@@ -37,8 +37,6 @@ b_val (Le a1 a2) s
   | a_val(a1)s <= a_val(a2)s  = True
   | otherwise = False
 
-update::State->Z->Var->State
-update s i v = (\v' -> if (v == v') then i else ( s v' ) )
 
 cond :: ( a->T, a->a, a->a ) ->( a->a )
 cond (b, s1, s2) x  = if (b x) then (s1 x) else (s2 x)
@@ -67,13 +65,16 @@ type State = Var -> Z
 type EnvP = Pname -> Stm
 type EnvV = Var   -> Z
 
-data Config = Inter Stm State | Final State
+data Config = Inter Stm State EnvP | Final State EnvP
 
 data Stm  = Skip | Comp Stm Stm | Ass Var Aexp | If Bexp Stm Stm | While Bexp Stm | Block DecV DecP Stm | Call Pname
       deriving (Show, Eq, Read)
 
 -- new :: Loc -> Loc
 -- new n = n + 1
+
+update::State->Z->Var->State
+update s i v = (\v' -> if (v == v') then i else ( s v' ) )
 
 updateV::State->(Var, Aexp)->State
 updateV s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s var' ) )
@@ -90,34 +91,37 @@ updateP' s decp = foldl updateP s decp
 --updateP :: (DecP, EnvV, EnvP) -> EnvP
 
 ns_stm :: Config -> Config
-ns_stm (Inter (Skip) s)       = Final s
-ns_stm (Inter (Comp s1 s2) s) = Final s''
+ns_stm (Inter (Skip) s envp)          =   Final s envp
+
+ns_stm (Inter (Comp s1 s2) s envp)    =   Final s'' envp''
+                                          where
+                                          Final s'  envp' = ns_stm(Inter s1 s  envp)
+                                          Final s'' envp'' = ns_stm(Inter s2 s' envp')
+
+ns_stm (Inter (Ass var aexp) s envp)  =   Final (update s z var) envp
+                                          where
+                                          z = a_val aexp s
+ns_stm (Inter (If bexp s1 s2) s envp)
+    | b_val bexp s  = ns_stm(Inter s1 s envp)
+    | otherwise     = ns_stm(Inter s2 s envp)
+
+ns_stm (Inter (While bexp s1) s envp)
+    | not (b_val bexp s)      = Final s envp
+    | otherwise               = ns_stm(Inter (While bexp s1) s' envp)
                                 where
-                                Final s'  = ns_stm(Inter s1 s)
-                                Final s'' = ns_stm(Inter s2 s')
-ns_stm (Inter (Ass var aexp) s) = Final (update s z var)
-                                  where
-                                  z = a_val aexp s
-ns_stm (Inter (If bexp s1 s2) s)
-    | b_val bexp s  = ns_stm(Inter s1 s)
-    | otherwise     = ns_stm(Inter s2 s)
-ns_stm (Inter (While bexp s1) s)
-    | not (b_val bexp s)     = Final s
-    | otherwise     = ns_stm(Inter (While bexp s1) s')
-                    where
-                    Final s' = ns_stm(Inter s1 s)
+                                Final s' envp = ns_stm(Inter s1 s envp)
 
-ns_stm (Inter (Block decv decp stm) s)  = Final s'''
+ns_stm (Inter (Block decv decp stm) s envp)  = Final s'' envp''
                                         where
-                                        s' = updateV' s decv
-                                        s'' = updateP' s' decp -- ??? How to make environmental variables globally accessible?
-                                        s''' = ns_stm(Inter stm s'')
+                                        s'                = updateV' s decv
+                                        envp'             = updateP' envp decp
+                                        Final s'' envp''  = ns_stm(Inter stm s' envp')
 
 
-s_ns::Stm->State->State
-s_ns s1 s = s'
+s_ns::Stm->State->EnvP->(State, EnvP)
+s_ns s1 s envp = (s', envp')
           where
-          Final s' = ns_stm (Inter s1 s)
+          Final s' envp' = ns_stm (Inter s1 s envp)
 
 s_ds::Stm->State->State
 s_ds ( Ass v a ) s    = update s (a_val a s) v
