@@ -63,9 +63,9 @@ aTerm =  parens aExp
      <|> liftM V identifier
      <|> liftM N integer
 
-aOperators = [ [Infix  (reservedOp "*"   >> return (Mult)) AssocLeft],
-               [Infix  (reservedOp "+"   >> return (Add)) AssocLeft,
-                Infix  (reservedOp "-"   >> return (Sub)) AssocLeft]
+aOperators = [ [Infix  (reservedOp "*"   >> return (Mult)) AssocRight],
+               [Infix  (reservedOp "+"   >> return (Add)) AssocRight,
+                Infix  (reservedOp "-"   >> return (Sub)) AssocRight]
              ]
 
 -- BEXP --
