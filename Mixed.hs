@@ -113,7 +113,7 @@ ns_stm (Inter (While bexp s1) s envv envp_m)
     | otherwise               = Final s'' envv'' envp_m''
                                 where
                                 Final s' envv' envp_m' = ns_stm(Inter s1 s envv envp_m)
-                                Final s'' envv'' envp_m'' = ns_stm(Inter s1 s' envv' envp_m')
+                                Final s'' envv'' envp_m'' = ns_stm(Inter (While bexp s1) s' envv' envp_m')
 
 ns_stm (Inter (Block decv decp stm) s envv envp_m)   = Final s'' envv'' envp_m''
                                               where
@@ -131,8 +131,8 @@ s_mixed   stm (Final s envv envp) = Final s' envv' envp'
           where
           Final s' envv' envp' = ns_stm (Inter stm s envv envp)
 
-s_test1 = s_testx(s_mixed s1'' (Final s2 s3 s4))
-s_test2 = s_testy(s_mixed s1'' (Final s2 s3 s4))
+s_test1 = s_testx(s_mixed s1''' (Final s2 s3 s4))
+s_test2 = s_testy(s_mixed s1''' (Final s2 s3 s4))
 s_test3 = s_testz(s_mixed s1'' (Final s2 s3 s4))
 s_testx::Config -> Integer
 s_testx (Inter stm state envv envp_m) = state "x"
@@ -153,6 +153,10 @@ s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Blo
 
 s1'' :: Stm
 s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Ass "y" (Mult (V "z") (V "y"))) (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+
+s1''' :: Stm
+s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+
 --
 s2 :: State
 s2 "x" = 5
