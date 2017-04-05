@@ -69,14 +69,10 @@ type DecP  = [(Pname,Stm)]
 type State = Var -> Z
 data EnvP_m = ENVP (Pname -> (Stm, EnvP_m))
 type EnvV = Var   -> Z
-data Config   = Inter Stm State EnvV EnvP_m | Final State EnvV EnvP_m
+data Config   = Inter Stm State EnvP_m | Final State EnvP_m
 data Stm  = Skip | Comp Stm Stm | Ass Var Aexp | If Bexp Stm Stm | While Bexp Stm | Block DecV DecP Stm | Call Pname
       deriving (Show, Eq, Read)
 
---updateP :: (DecP, EnvV, EnvP) -> EnvP
-
-update::State->Z->Var->State
-update s i v = (\v' -> if (v == v') then i else ( s v' ) )
 
 updateV'::State->(Var, Aexp)->State
 updateV' s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s var' ) )
@@ -93,56 +89,56 @@ updateP envp_m decp = foldl updateP' envp_m decp
 -- Introduce 'current environment' variable?
 
 ns_stm :: Config -> Config
-ns_stm (Inter (Skip) s envv envp_m)          =   Final s envv envp_m
+ns_stm (Inter (Skip) s  envp_m)          =   Final s  envp_m
 
-ns_stm (Inter (Comp s1 s2) s envv envp_m)    =   Final s'' envv'' envp_m''
+ns_stm (Inter (Comp s1 s2) s  envp_m)    =   Final s''  envp_m''
                                           where
-                                          Final s'  envv' envp_m' = ns_stm(Inter s1 s envv envp_m)
-                                          Final s'' envv'' envp_m'' = ns_stm(Inter s2 s' envv' envp_m')
+                                          Final s'  envp_m' = ns_stm(Inter s1 s envp_m)
+                                          Final s'' envp_m'' = ns_stm(Inter s2 s' envp_m')
 
-ns_stm (Inter (Ass var aexp) s envv envp_m)  =   Final (updateV s [(var, aexp)]) envv envp_m
+ns_stm (Inter (Ass var aexp) s envp_m)  =   Final (updateV s [(var, aexp)])  envp_m
                                         --  where
                                         --  z = a_val aexp s
 
-ns_stm (Inter (If bexp s1 s2) s envv envp_m)
-    | b_val bexp s  = ns_stm(Inter s1 s envv envp_m)
-    | otherwise     = ns_stm(Inter s2 s envv envp_m)
+ns_stm (Inter (If bexp s1 s2) s envp_m)
+    | b_val bexp s  = ns_stm(Inter s1 s envp_m)
+    | otherwise     = ns_stm(Inter s2 s envp_m)
 
-ns_stm (Inter (While bexp s1) s envv envp_m)
-    | not (b_val bexp s)      = Final s envv envp_m
-    | otherwise               = Final s'' envv'' envp_m''
+ns_stm (Inter (While bexp s1) s envp_m)
+    | not (b_val bexp s)      = Final s envp_m
+    | otherwise               = Final s'' envp_m''
                                 where
-                                Final s' envv' envp_m' = ns_stm(Inter s1 s envv envp_m)
-                                Final s'' envv'' envp_m'' = ns_stm(Inter (While bexp s1) s' envv' envp_m')
+                                Final s' envp_m' = ns_stm(Inter s1 s envp_m)
+                                Final s'' envp_m'' = ns_stm(Inter (While bexp s1) s' envp_m')
 
-ns_stm (Inter (Block decv decp stm) s envv envp_m)   = Final s'' envv'' envp_m''
+ns_stm (Inter (Block decv decp stm) s envp_m)   = Final s'' envp_m''
                                               where
                                               s'                          = updateV s decv
                                               envp_m'                     = updateP envp_m decp
-                                              Final s'' envv'' envp_m''   = ns_stm(Inter stm s' envv envp_m')
+                                              Final s'' envp_m''   = ns_stm(Inter stm s'  envp_m')
 
-ns_stm (Inter (Call pname) s envv (ENVP envp_m) )    =    ns_stm(Inter (stm') s envv (recursive_envp_update) )
+ns_stm (Inter (Call pname) s (ENVP envp_m) )    =    ns_stm(Inter (stm') s  (recursive_envp_update) )
                                                     where
                                                     (stm', envp_m')             = envp_m pname                      -- Get & use local environment of P
                                                     recursive_envp_update       = updateP' (envp_m') (pname, stm')  -- When calling P, update its environment so it recognises itself
 
 s_mixed::Stm->Config->Config
-s_mixed   stm (Final s envv envp) = Final s' envv' envp'
+s_mixed   stm (Final s envp) = Final s' envp'
           where
-          Final s' envv' envp' = ns_stm (Inter stm s envv envp)
+          Final s'  envp' = ns_stm (Inter stm s envp)
 
-s_test1 = s_testx(s_mixed s1''' (Final s2 s3 s4))
-s_test2 = s_testy(s_mixed s1''' (Final s2 s3 s4))
-s_test3 = s_testz(s_mixed s1'' (Final s2 s3 s4))
+s_test1 = s_testx(s_mixed s1''' (Final s2 s3))
+s_test2 = s_testy(s_mixed s1''' (Final s2 s3))
+s_test3 = s_testz(s_mixed s1'' (Final s2 s3))
 s_testx::Config -> Integer
-s_testx (Inter stm state envv envp_m) = state "x"
-s_testx (Final state envv envp_m) = state "x"
+s_testx (Inter stm state envp_m) = state "x"
+s_testx (Final state envp_m) = state "x"
 s_testy::Config -> Integer
-s_testy (Inter stm state envv envp) = state "y"
-s_testy (Final state envv envp) = state "y"
+s_testy (Inter stm state envp) = state "y"
+s_testy (Final state envp) = state "y"
 s_testz::Config -> Integer
-s_testz (Inter stm state envv envp) = state "z"
-s_testz (Final state envv envp) = state "z"
+s_testz (Inter stm state envp) = state "z"
+s_testz (Final state envp) = state "z"
 
 
 s1 :: Stm
@@ -162,8 +158,6 @@ s2 :: State
 s2 "x" = 5
 s2 _ = 0
 
-s3 :: EnvV
-s3 _ = 0
 
-s4 :: EnvP_m
-s4 = ENVP (\pname -> (Skip, s4))
+s3 :: EnvP_m
+s3 = ENVP (\pname -> (Skip, s3))
