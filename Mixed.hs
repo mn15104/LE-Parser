@@ -121,38 +121,29 @@ ns_stm (Inter (Block decv decp stm) s envv envp_m)   = Final s'' envv'' envp_m''
                                               envp_m'                     = updateP envp_m decp
                                               Final s'' envv'' envp_m''   = ns_stm(Inter stm s' envv envp_m')
 
-ns_stm (Inter (Call pname) s envv (ENVP envp_m) )      =     Final s'' envv'' envp_m''
-                                              where     -- update procedure environment
-                                              Final s'' envv'' envp_m''  = ns_stm(Inter (stm') s envv (envp_m') )
-                                              (stm', envp_m') = envp_m pname
--- do; ENVP envp_m = environ of pname;
-
+ns_stm (Inter (Call pname) s envv (ENVP envp_m) )    =    ns_stm(Inter (stm') s envv (recursive_envp_update) )
+                                                    where
+                                                    (stm', envp_m')             = envp_m pname                      -- Get & use local environment of P
+                                                    recursive_envp_update       = updateP' (envp_m') (pname, stm')  -- When calling P, update its environment so it recognises itself
 
 s_mixed::Stm->Config->Config
 s_mixed   stm (Final s envv envp) = Final s' envv' envp'
           where
           Final s' envv' envp' = ns_stm (Inter stm s envv envp)
 
--- s_dynamic::Stm->Config->Config
--- s_dynamic stm (Final s envv envp) = Final s' envv' envp'
---           where
---           Final s' envv' envp' = ns_stm (Inter stm s envv envp)
---
--- ---------------------------------------------
---
-
-s_test = s_testx(s_mixed s1' (Final s2 s3 s4))
+s_test1 = s_testx(s_mixed s1'' (Final s2 s3 s4))
+s_test2 = s_testy(s_mixed s1'' (Final s2 s3 s4))
+s_test3 = s_testz(s_mixed s1'' (Final s2 s3 s4))
 s_testx::Config -> Integer
 s_testx (Inter stm state envv envp_m) = state "x"
 s_testx (Final state envv envp_m) = state "x"
+s_testy::Config -> Integer
+s_testy (Inter stm state envv envp) = state "y"
+s_testy (Final state envv envp) = state "y"
+s_testz::Config -> Integer
+s_testz (Inter stm state envv envp) = state "z"
+s_testz (Final state envv envp) = state "z"
 
--- s_testy::Config -> Integer
--- s_testy (Inter stm state envv envp) = state "y"
--- s_testy (Final state envv envp) = state "y"
--- s_testz::Config -> Integer
--- s_testz (Inter stm state envv envp) = state "z"
--- s_testz (Final state envv envp) = state "z"
---
 
 s1 :: Stm
 s1 = Block [("X", N 5)] [("foo", Skip)] Skip
@@ -160,8 +151,8 @@ s1 = Block [("X", N 5)] [("foo", Skip)] Skip
 s1' :: Stm
 s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
 
--- s1'' :: Stm
--- s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Ass "y" (Mult (V "z") (V "y"))) (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+s1'' :: Stm
+s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Ass "y" (Mult (V "z") (V "y"))) (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 --
 s2 :: State
 s2 "x" = 5

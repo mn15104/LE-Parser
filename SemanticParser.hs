@@ -137,7 +137,9 @@ s_dynamic stm (Final s envv envp) = Final s' envv' envp'
 
 ---------------------------------------------
 
-s_test = s_testy(s_dynamic s1'' (Final s2 s3 s4))
+s_test1 = s_testx(s_dynamic s1'' (Final s2 s3 s4))
+s_test2 = s_testy(s_dynamic s1'' (Final s2 s3 s4))
+s_test3 = s_testz(s_dynamic s1'' (Final s2 s3 s4))
 s_testx::Config -> Integer
 s_testx (Inter stm state envp envv) = state "x"
 s_testx (Final state envv envp) = state "x"
