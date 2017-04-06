@@ -112,13 +112,13 @@ updateS (Inter stm s envv envp loc store decv) z v =  Final s' envv envp loc sto
 
 
 ns_stm :: Config -> Config
--- ns_stm (Inter (Skip) s envv envp loc store)           =   Final s envv envp loc store
---
--- ns_stm (Inter (Comp s1 s2) s envv envp loc store)     =   Final s'' envv'' envp'' loc'' store''
---                                               where
---                                               Final s'  envv' envp' loc' store'     = ns_stm(Inter s1 s envv envp loc store)
---                                               Final s'' envv'' envp'' loc'' store'' = ns_stm(Inter s2 s' envv' envp' loc' store')
---
+ns_stm (Inter (Skip) s envv envp loc store decv)           =   Final s envv envp loc store decv
+
+ns_stm (Inter (Comp s1 s2) s envv envp loc store decv)     =   Final s'' envv'' envp'' loc'' store'' decv
+                                              where
+                                              Final s'  envv' envp' loc' store' decv'    = ns_stm(Inter s1 s envv envp loc store decv)
+                                              Final s'' envv'' envp'' loc'' store'' decv'' = ns_stm(Inter s2 s' envv' envp' loc' store' decv')
+
 
 decVcontainsV :: [(Var, Aexp)] -> Var -> Bool
 decV `decVcontainsV` var = (var `elem` decV')
