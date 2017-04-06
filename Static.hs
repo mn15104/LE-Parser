@@ -74,25 +74,25 @@ type Store = Loc -> Z     -- Mapping #2: Associates a variable value with a loca
 
 new :: Loc -> Loc
 new loc = loc + 1
-
+-- We're updating values by increasing loc & store, when we should actually be updating an existing value
 updateV'::Config->(Var, Aexp)->Config
 updateV' (Inter stm s envv envp loc store) (var, aexp) = Final s envv' envp nextloc newstore
-                            where nextloc = new loc;
-                                  envv' = (\var' -> if (var == var')
-                                                    then nextloc
+                            where nextloc = new loc;                    -- inside current procedure A
+                                  envv' = (\var' -> if (var == var')    -- update current environment's variable to location mapping -- difference between decv and assign, i.e. updateV and update, only decv is static inside a procedure
+                                                    then loc            -- variables inside a begin decv s end block are static to it
                                                     else ( envv var' ))
-                                  newstore = (\nextloc' -> if (nextloc == nextloc')
-                                                            then a_val aexp envv' store
-                                                            else store nextloc')
+                                  newstore = (\loc' -> if (loc == loc') -- update global store to hold the aexp using the original envv - e.g. x := x + 1, we have to evaluate the RHS x with the original envv
+                                                            then a_val aexp envv store
+                                                            else store loc')
 
-updateV' (Final s envv envp loc store) (var, aexp) = Final s envv' envp nextloc newstore
-                            where nextloc = new loc;
-                                  envv' = (\var' -> if (var == var')
-                                                    then nextloc
-                                                    else ( envv var' ))
-                                  newstore = (\nextloc' -> if (nextloc == nextloc')
-                                                            then a_val aexp envv' store
-                                                            else store nextloc')
+-- updateV' (Final s envv envp loc store) (var, aexp) = Final s envv' envp nextloc newstore
+--                             where nextloc = new loc;
+--                                   envv' = (\var' -> if (var == var')
+--                                                     then nextloc
+--                                                     else ( envv var' ))
+--                                   newstore = (\nextloc' -> if (nextloc == nextloc')
+--                                                             then a_val aexp envv' store
+--                                                             else store nextloc')
 
 updateV::Config->DecV->Config
 updateV config decv  = foldl updateV' config decv
@@ -133,22 +133,16 @@ ns_stm (Inter (Block decv decp stm) s envv envp loc store)   = ns_stm(Inter stm 
                                                         where Final s' envv' envp' loc' store' = updateP config' decp
                                                               config' = updateV (Inter (Block decv decp stm) s envv envp loc store) decv
 
--- ns_stm (Inter (Call pname) s envv (ENVP envp) loc store )    =    ns_stm(Inter (stm') s envv' (recursive_envp_update) loc store)
---                                                     where
---                                                     (stm', envv', envp') = envp pname                      -- Get & use local environment of P and V
---                                                     Final _ _ recursive_envp_update _ _     = updateP' (Inter stm' s envv' envp' loc store) (pname, stm')  -- When calling P, update its environment so it recognises itself
-
-ns_stm (Inter (Call pname) s envv (ENVP envp) loc store )    =    Final s envv (recursive_envp_update) loc'' store''
-                                                        where (stm', envv', envp') = envp pname
-                                                              Final _ _ recursive_envp_update _ _ = updateP' (Inter stm' s envv' envp' loc store) (pname, stm')
-                                                              Final s'' envv'' envp'' loc'' store'' = ns_stm(Inter (stm') s envv' (recursive_envp_update) loc store)
-
+ns_stm (Inter (Call pname) s envv (ENVP envp)  loc store)    =    Final s envv (ENVP envp) loc'' store''
+                                                                  where (stm', envv', envp' )  = envp pname                      -- Get & use local environment of P
+                                                                        Final s'' envv'' envp'' loc'' store'' = ns_stm(Inter (stm') s  envv' envp' loc store) --although envp is changed correctly on call, we're passing the old loc & store, which is used unfortunately
+                                                                        Final sr envvr recursive_envp_update locr storer      = updateP' (Final s envv' envp' loc store) (pname, stm')
 s_static::Stm->Config->Config
 s_static  stm (Final s envv envp loc store) = ns_stm (Inter stm s envv envp loc store)
 
 s_test1 = s_testx(s_static s1''' (Final s2 s3 s4 s5 s6))
 s_test2 = s_testy(s_static s1''' (Final s2 s3 s4 s5 s6))
-s_test3 = s_testz(s_static s1' (Final s2 s3 s4 s5 s6))
+s_test3 = s_testz(s_static s1''' (Final s2 s3 s4 s5 s6))
 s_test4 = s_testlocal(s_static s1' (Final s2 s3 s4 s5 s6))
 s_test5 n = s_teststore n (s_static s1' (Final s2 s3 s4 s5 s6))
 s_teststore::Integer->Config -> Integer
@@ -167,18 +161,21 @@ s_testz::Config -> Integer
 s_testz (Inter stm state envv envp loc store) = store (envv "z")
 s_testz (Final state envv envp loc store) = store (envv "z")
 
-
+-- Checklist : neg, eq
 s1 :: Stm
 s1 = Block [("X", N 5)] [("foo", Skip)] Skip
 
 s1' :: Stm
-s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
+s1' = Block [("x",N 2)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
 
 s1'' :: Stm
 s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Ass "y" (Mult (V "z") (V "y"))) (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
 s1''' :: Stm
 s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+
+s1'''' :: Stm
+s1'''' = Comp (Ass "z" (V "x")) (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Ass "y" (Sub (V "z") (V "y")))))
 
 --
 s2 :: State
@@ -192,8 +189,8 @@ s4 :: EnvP
 s4 = ENVP (\pname -> (Skip, s3, s4))
 
 s5 :: Loc
-s5 = 0
+s5 = 1
 
 s6 :: Store
 s6 0 = 5
-s6 _ = 0
+s6 _ = 7
