@@ -127,9 +127,9 @@ s_mixed   stm (Final s envp) = Final s' envp'
           where
           Final s'  envp' = ns_stm (Inter stm s envp)
 
-s_test1 = s_testx(s_mixed s1''' (Final s2 s3))
-s_test2 = s_testy(s_mixed s1''' (Final s2 s3))
-s_test3 = s_testz(s_mixed s1'' (Final s2 s3))
+s_test1 = s_testx(s_mixed s1' (Final s2 s3))
+s_test2 = s_testy(s_mixed s1' (Final s2 s3))
+s_test3 = s_testz(s_mixed s1' (Final s2 s3))
 s_testx::Config -> Integer
 s_testx (Inter stm state envp_m) = state "x"
 s_testx (Final state envp_m) = state "x"
@@ -143,7 +143,7 @@ s_testz (Final state envp) = state "z"
 
 s1 :: Stm
 s1 = Block [("X", N 5)] [("foo", Skip)] Skip
-
+--Scope Test Page 53
 s1' :: Stm
 s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
 
