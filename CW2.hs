@@ -88,8 +88,13 @@ relation =   (reservedOp "=" >> return Eq)
          <|> (reservedOp "<=" >> return Le)
 
 bOperators = [ [Prefix (reservedOp "!" >> return (Neg))]
-             , [Infix  (reservedOp "&" >> return (And)) AssocLeft]
+             , [Infix  (reservedOp "&" >> return (And)) AssocRight]
              ]
+
+semicolon = [ [Infix  (reservedOp ";"   >> return (Comp)) AssocRight]]
+
+seqstm_right_asc :: Parser Stm
+seqstm_right_asc  = buildExpressionParser semicolon stm'
 
 -- PROC PARSER --
 
@@ -97,12 +102,12 @@ procParser :: Parser Stm
 procParser = whiteSpace >> stm
 
 stm :: Parser Stm
-stm =   seqstm
+stm =   seqstm_right_asc
           <|> parens stm
           <|> block
 
-seqstm :: Parser Stm -- separate the statements at the ; into Comp S1 S2
-seqstm =
+seqstm_left_asc :: Parser Stm -- separate the statements at the ; into Comp S1 S2
+seqstm_left_asc =
  do list <- (sepBy1 stm' semi)
     return $ is_semi list
 
@@ -112,16 +117,13 @@ is_semi [x] = x
 is_semi (x:xs) = Comp x (is_semi xs)
 
 stm' :: Parser Stm
-stm' =      parens stm
+stm' =      parens stm'
            <|> skipStm
            <|> call
            <|> block
            <|> ifStm
            <|> whileStm
            <|> assignStm
-
--- var :: Parser Var
--- var = many1(oneOf ['A' .. 'Z'] <|> oneOf ['a' .. 'z']) <* whiteSpace
 
 whitespace :: Parser ()
 whitespace = many (oneOf "\ \t \n") *> pure ()
@@ -130,10 +132,10 @@ assignStm :: Parser Stm
 assignStm = Ass <$> identifier <* reservedOp ":=" <*> aExp
 
 ifStm :: Parser Stm
-ifStm = If <$ reserved "if" <*> bExp <* reserved "then" <*> stm' <* reserved "else" <*> stm'
+ifStm = If <$ reserved "if" <*> bExp <* reserved "then" <*> stm <* reserved "else" <*> stm
 
 whileStm :: Parser Stm
-whileStm = While <$ reserved "while" <*> bExp <* reserved "do" <*> stm'
+whileStm = While <$ reserved "while" <*> bExp <* reserved "do" <*> stm
 
 skipStm :: Parser Stm
 skipStm = Skip <$ reserved "skip" <* whiteSpace

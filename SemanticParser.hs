@@ -39,14 +39,6 @@ b_val (Le a1 a2) s
   | otherwise = False
 
 
-cond :: ( a->T, a->a, a->a ) ->( a->a )
-cond (b, s1, s2) x  = if (b x) then (s1 x) else (s2 x)
-
-fix :: ((State->State)->(State->State))->(State->State)
-fix ff = ff (fix ff)
-
-
-
 
 
 -- new :: Loc -> Loc
