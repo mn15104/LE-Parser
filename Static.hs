@@ -10,9 +10,7 @@ n_val n = n
 
 a_val_static::Aexp->Config_st->Z
 a_val_static (N n) config        = n_val(n)
-a_val_static (V v) (Inter_st stm s envv envp loc store decv)
-  | (envv v == -1)   = s v            -- if global variable, evaluate using state
-  | otherwise        = store (envv v) -- if local variable, evaluate using store
+a_val_static (V v) (Inter_st stm s envv envp loc store decv) = store (envv v)
 a_val_static (Mult a1 a2) config = a_val_static(a1)config * a_val_static(a2)config
 a_val_static (Add a1 a2)  config = a_val_static(a1)config + a_val_static(a2)config
 a_val_static (Sub a1 a2)  config = a_val_static(a1)config - a_val_static(a2)config
@@ -83,9 +81,9 @@ updateP_st' (Final_st s envv envp loc store decv) (pname, stm) = Final_st s envv
 updateP_st::Config_st->DecP->Config_st
 updateP_st config decp = foldl updateP_st' config decp
 
-updateS_st::Config_st->Z->Var->Config_st
-updateS_st (Inter_st stm s envv envp loc store decv) z v =  Final_st s' envv envp loc store decv
-                                                      where s' = (\v' -> if (v == v') then z else ( s v' ) )
+-- updateS_st::Config_st->Z->Var->Config_st
+-- updateS_st (Inter_st stm s envv envp loc store decv) z v =  Final_st s' envv envp loc store decv
+--                                                       where s' = (\v' -> if (v == v') then z else ( s v' ) )
 
 decVcontainsV :: [(Var, Aexp)] -> Var -> Bool
 decV `decVcontainsV` var = (var `elem` decV')
@@ -99,15 +97,15 @@ ns_stm_st (Inter_st (Comp s1 s2) s envv envp loc store decv)     =   Final_st s'
                                               Final_st s'  envv' envp' loc' store' decv'    = ns_stm_st(Inter_st s1 s envv envp loc store decv)
                                               Final_st s'' envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st s2 s' envv' envp' loc' store' decv')
 
-ns_stm_st (Inter_st (Ass var aexp) s envv envp loc store decv)
-  | decVcontainsV decv var  = updateV_st (Inter_st (Ass var aexp) s envv envp loc store decv) ([(var, aexp)])             -- update local variable
-  | otherwise               = updateS_st (Inter_st (Ass var aexp) s envv envp loc store decv)
-                                        (a_val_static aexp (Inter_st (Ass var aexp) s envv envp loc store decv)) var --update global variable
+ns_stm_st (Inter_st (Ass var aexp) s envv envp loc store decv) = updateV_st (Inter_st (Ass var aexp) s envv envp loc store decv) ([(var, aexp)])
+  -- | decVcontainsV decv var  = updateV_st (Inter_st (Ass var aexp) s envv envp loc store decv) ([(var, aexp)])             -- update local variable
+  -- | otherwise               = updateS_st (Inter_st (Ass var aexp) s envv envp loc store decv)
+  --                                       (a_val_static aexp (Inter_st (Ass var aexp) s envv envp loc store decv)) var --update global variable
 
 
 ns_stm_st (Inter_st (If bexp s1 s2) s envv envp loc store decv)
     | b_val_static bexp (Inter_st (If bexp s1 s2) s envv envp loc store decv)   = ns_stm_st(Inter_st s1 s envv envp loc store decv)
-    | otherwise                                                       = ns_stm_st(Inter_st s2 s envv envp loc store decv)
+    | otherwise                                                                 = ns_stm_st(Inter_st s2 s envv envp loc store decv)
 
 ns_stm_st (Inter_st (While bexp s1) s envv envp loc store decv)
     | not (b_val_static bexp (Inter_st (While bexp s1) s envv envp loc store decv))      = Final_st s envv envp loc store decv
@@ -116,10 +114,13 @@ ns_stm_st (Inter_st (While bexp s1) s envv envp loc store decv)
                                 Final_st s' envv' envp' loc' store' decv'      = ns_stm_st(Inter_st s1 s envv envp loc store decv)
                                 Final_st s'' envv'' envp'' loc'' store'' decv''= ns_stm_st(Inter_st (While bexp s1) s' envv' envp' loc' store' decv')
 -- State holds global variables
-ns_stm_st (Inter_st (Block decv decp stm) s envv envp loc store olddecv)   = Final_st s'' envv envp'' loc'' store'' olddecv
-                                                        where Final_st s'' env'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm s' envv' envp' loc' store' decv')
-                                                              Final_st s' envv' envp' loc' store' decv' = updateP_st config' decp        -- update environment procedure
-                                                              config' = updateV_st (Inter_st (Block decv decp stm) s envv envp loc store decv) decv -- update environment variables using decv
+ns_stm_st (Inter_st (Block decv decp stm) s envv envp loc store olddecv)   = Final_st s'' envv_ envp'' loc'' store'' olddecv
+                                                        where config' = updateV_st (Inter_st (Block decv decp stm) s envv envp loc store decv) decv                     -- update procedure's environment to contain local variables
+                                                              Final_st s' envv' envp' loc' store' decv' = updateP_st config' decp                                       -- update procedure environment mapping, using our updated envv
+                                                              Final_st s'' envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm s' envv' envp' loc' store' decv') -- execute procedure stmt with the procedure environment
+                                                              envv_ = (\v -> if (decVcontainsV decv v) then (envv v) else (envv'' v))
+                                      --SOMETHING WRONG HERE  --envv''' = (\v -> if decVcontainsV decv'' v then envv v else envv'' v)
+                                                               -- update environment variables using decv
                                                             --  envv''' = (\v -> if((s v /= s'' v) && (decVcontainsV olddecv v)) then updatedloc else envv v)
                                                             --  updatedloc = if(envv''' == envv)  then new loc''  else loc''
                                                             -- what if we *only update envv* instead of state, and when passing it back, let original_envv = (\v -> if (not(decVcontainsV branched_decV v)) then oldenvv v else newenvv v)
@@ -128,11 +129,12 @@ ns_stm_st (Inter_st (Block decv decp stm) s envv envp loc store olddecv)   = Fin
 
 
 
-ns_stm_st (Inter_st (Call pname) s envv (ENVP_st envp) loc store decv)    =    Final_st s'' envv envp'' loc'' store'' decv
-                                                        where (stm', envv', envp', decv') = envp pname                      -- Get & use local environment
-                                                              Final_st sr envvr recursive_envp_update locr storer decvr = updateP_st' (Final_st s envv' envp' loc store decv') (pname, stm') -- Opdate P's procedure environment to include itself
-                                                              Final_st s'' envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st (stm') s  envv' recursive_envp_update loc store decv')  -- Execute called statement
-
+ns_stm_st (Inter_st (Call pname) s envv (ENVP_st envp) loc store decv)    =    Final_st s'' envv''' envp'' loc'' store'' decv
+                                                        where (stm', envv', envp', decv') = envp pname                      -- Get & use local environment of called procedure
+                                                              envv_update = (\v -> if decVcontainsV decv' v then envv v else envv' v)  -- update called procedures variable mapping for non-local variables
+                                                              Final_st sr recursive_envv_update recursive_envp_update locr storer decvr = updateP_st' (Final_st s envv_update envp' loc store decv') (pname, stm') -- Opdate P's procedure environment to include itself
+                                                              Final_st s'' envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st (stm') s recursive_envv_update recursive_envp_update loc store decv')  -- Execute called statement
+                                                              envv''' = (\v -> if decVcontainsV decv' v then envv v else envv'' v)
 s_static::Stm->Config_st->Config_st
 s_static stm (Final_st s envv envp loc store decv) = ns_stm_st (Inter_st stm s envv envp loc store decv)
 
@@ -140,7 +142,7 @@ s_static stm (Final_st s envv envp loc store decv) = ns_stm_st (Inter_st stm s e
 ----------------------------------------------------------------------------------------
 ----------------------------- * STATIC TEST FUNCTIONS * --------------------------------
 
-s_test1_st = s_testy_st(s_static exercise_2_37 (default_config_st))
+s_test1_st = s_testy_st(s_static fac_while (default_config_st))
 
 s_get_store_st::Config_st->Integer->Integer
 s_get_store_st (Inter_st stm state envv envp loc store decv) n  = store(n)
@@ -150,8 +152,8 @@ s_testx_st::Config_st -> Integer
 s_testx_st (Inter_st stm state envv envp loc store decv) = store (envv "x")
 s_testx_st (Final_st state envv envp loc store decv) = store (envv "x")
 s_testy_st::Config_st -> Integer
-s_testy_st (Inter_st stm state envv envp loc store decv) = state "x"
-s_testy_st (Final_st state envv envp loc store decv) = state "x"
+s_testy_st (Inter_st stm state envv envp loc store decv) = store(envv "y")
+s_testy_st (Final_st state envv envp loc store decv) = store(envv "y")
 s_testz_st::Config_st -> Integer
 s_testz_st (Inter_st stm state envv envp loc store decv) = store (envv "z")
 s_testz_st (Final_st state envv envp loc store decv) = store (envv "z")
@@ -163,7 +165,7 @@ scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
 
 fac_recurse :: Stm
-fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Call "fac") (Ass "y" (Mult (V "z") (V "y"))) ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+fac_recurse = Block [("x", N 5)] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Call "fac") (Ass "y" (Mult (V "z") (V "y"))) ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
 fac_while:: Stm
 fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
@@ -180,7 +182,7 @@ exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 
 default_config_st = Final_st def_state_st def_envv_st def_envp_st def_loc_st def_store_st def_decv_st
 
 def_state_st :: State
-def_state_st "x" = 5
+def_state_st "x" = 0
 def_state_st _ = 0
 
 def_envv_st :: EnvV
