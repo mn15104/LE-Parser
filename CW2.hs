@@ -97,8 +97,8 @@ procParser :: Parser Stm
 procParser = whiteSpace >> stm
 
 stm :: Parser Stm
-stm =   parens stm
-          <|> seqstm
+stm =   seqstm
+          <|> parens stm
           <|> block
 
 seqstm :: Parser Stm -- separate the statements at the ; into Comp S1 S2
@@ -112,7 +112,8 @@ is_semi [x] = x
 is_semi (x:xs) = Comp x (is_semi xs)
 
 stm' :: Parser Stm
-stm' =      skipStm
+stm' =      parens stm
+           <|> skipStm
            <|> call
            <|> block
            <|> ifStm
@@ -129,10 +130,10 @@ assignStm :: Parser Stm
 assignStm = Ass <$> identifier <* reservedOp ":=" <*> aExp
 
 ifStm :: Parser Stm
-ifStm = If <$ reserved "if" <*> bExp <* reserved "then" <*> stm <* reserved "else" <*> stm
+ifStm = If <$ reserved "if" <*> bExp <* reserved "then" <*> stm' <* reserved "else" <*> stm'
 
 whileStm :: Parser Stm
-whileStm = While <$ reserved "while" <*> bExp <* reserved "do" <*> stm
+whileStm = While <$ reserved "while" <*> bExp <* reserved "do" <*> stm'
 
 skipStm :: Parser Stm
 skipStm = Skip <$ reserved "skip" <* whiteSpace
