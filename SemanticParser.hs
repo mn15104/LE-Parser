@@ -57,7 +57,8 @@ data Aexp = N Num | V Var| Mult Aexp Aexp | Add Aexp Aexp | Sub Aexp Aexp
       deriving (Show, Eq, Read)
 data Bexp = TRUE | FALSE | Neg Bexp | And Bexp Bexp | Le Aexp Aexp | Eq Aexp Aexp
       deriving (Show, Eq, Read)
-
+data Stm  = Skip | Comp Stm Stm | Ass Var Aexp | If Bexp Stm Stm | While Bexp Stm | Block DecV DecP Stm | Call Pname
+      deriving (Show, Eq, Read)
 type Num   = Integer
 type Var   = String
 type Pname = String
@@ -67,88 +68,72 @@ type T = Bool
 type DecV  = [(Var,Aexp)]
 type DecP  = [(Pname,Stm)]
 type State = Var -> Z
-type EnvP    = Pname -> Stm
-type EnvP_m = Pname -> (Stm, EnvP)
-type EnvV = Var   -> Z
-data Config   = Inter Stm State EnvV EnvP | Final State EnvV EnvP
-data Config_m = Inter_m Stm State EnvV EnvP_m | Final_m State EnvV EnvP_m
-data Stm  = Skip | Comp Stm Stm | Ass Var Aexp | If Bexp Stm Stm | While Bexp Stm | Block DecV DecP Stm | Call Pname
-      deriving (Show, Eq, Read)
+type EnvP_d    = Pname -> Stm
+data Config_d   = Inter_d Stm State EnvP_d | Final_d State EnvP_d
 
---updateP :: (DecP, EnvV, EnvP) -> EnvP
 
-update::State->Z->Var->State
-update s i v = (\v' -> if (v == v') then i else ( s v' ) )
+update'::State->(Var, Aexp)->State
+update' s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s var' ) )
 
-updateV'::State->(Var, Aexp)->State
-updateV' s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s var' ) )
+update::State->DecV->State
+update s decv = foldl update' s decv
 
-updateV::State->DecV->State
-updateV s decv = foldl updateV' s decv
+updateP_d'::EnvP_d->(Pname, Stm)->EnvP_d
+updateP_d' envp (pname, stm) = (\pname' -> if (pname == pname') then stm else ( envp pname' ) )
 
-updateP'::EnvP->(Pname, Stm)->EnvP
-updateP' envp (pname, stm) = (\pname' -> if (pname == pname') then stm else ( envp pname' ) )
+updateP_d::EnvP_d->DecP->EnvP_d
+updateP_d envp decp = foldl updateP_d' envp decp
 
-updateP::EnvP->DecP->EnvP
-updateP envp decp = foldl updateP' envp decp
+ns_stm_d :: Config_d -> Config_d
+ns_stm_d (Inter_d (Skip) s envp)          =   Final_d s envp
 
-ns_stm :: Config -> Config
-ns_stm (Inter (Skip) s envv envp)          =   Final s envv envp
-
-ns_stm (Inter (Comp s1 s2) s envv envp)    =   Final s'' envv'' envp''
+ns_stm_d (Inter_d (Comp s1 s2) s envp)    =   Final_d s'' envp''
                                           where
-                                          Final s'  envv' envp' = ns_stm(Inter s1 s envv envp)
-                                          Final s'' envv'' envp'' = ns_stm(Inter s2 s' envv' envp')
+                                          Final_d s'  envp' = ns_stm_d(Inter_d s1 s envp)
+                                          Final_d s'' envp'' = ns_stm_d(Inter_d s2 s' envp')
 
-ns_stm (Inter (Ass var aexp) s envv envp)  =   Final (updateV s [(var, aexp)]) envv envp
-                                        --  where
-                                        --  z = a_val aexp s
+ns_stm_d (Inter_d (Ass var aexp) s envp)  =   Final_d (update s [(var, aexp)]) envp
 
-ns_stm (Inter (If bexp s1 s2) s envv envp)
-    | b_val bexp s  = ns_stm(Inter s1 s envv envp)
-    | otherwise     = ns_stm(Inter s2 s envv envp)
+ns_stm_d (Inter_d (If bexp s1 s2) s envp)
+    | b_val bexp s  = ns_stm_d(Inter_d s1 s envp)
+    | otherwise     = ns_stm_d(Inter_d s2 s envp)
 
-ns_stm (Inter (While bexp s1) s envv envp)
-    | not (b_val bexp s)      = Final s envv envp
-    | otherwise               = Final s'' envv'' envp''
+ns_stm_d (Inter_d (While bexp s1) s envp)
+    | not (b_val bexp s)      = Final_d s envp
+    | otherwise               = Final_d s'' envp''
                                 where
-                                Final s' envv' envp' = ns_stm(Inter s1 s envv envp)
-                                Final s'' envv'' envp'' = ns_stm(Inter (While bexp s1) s' envv' envp')
+                                Final_d s'  envp' = ns_stm_d(Inter_d s1 s envp)
+                                Final_d s''  envp'' = ns_stm_d(Inter_d (While bexp s1) s' envp')
 
-ns_stm (Inter (Block decv decp stm) s envv envp)   = Final s'' envv'' envp''
+ns_stm_d (Inter_d (Block decv decp stm) s envp)   = Final_d s'' envp''
                                               where
-                                              s'                = updateV s decv
-                                              envp'             = updateP envp decp
-                                              Final s'' envv'' envp''  = ns_stm(Inter stm s' envv envp')
+                                              s'                = update s decv
+                                              envp'             = updateP_d envp decp
+                                              Final_d s'' envp''  = ns_stm_d(Inter_d stm s' envp')
 
-ns_stm (Inter (Call pname) s envv envp)      =     Final s' envv' envp'
+ns_stm_d (Inter_d (Call pname) s envp)      =     Final_d s' envp'
                                               where
-                                              Final s' envv' envp'  = ns_stm(Inter (envp pname) s envv envp)
+                                              Final_d s' envp'  = ns_stm_d(Inter_d (envp pname) s envp)
 
-s_mixed::Stm->Config->Config
-s_mixed   stm (Final s envv envp) = Final s' envv' envp'
+s_dynamic::Stm->Config_d->Config_d
+s_dynamic stm (Final_d s envp) = Final_d s' envp'
           where
-          Final s' envv' envp' = ns_stm (Inter stm s envv envp)
+          Final_d s' envp' = ns_stm_d (Inter_d stm s envp)
 
-s_dynamic::Stm->Config->Config
-s_dynamic stm (Final s envv envp) = Final s' envv' envp'
-          where
-          Final s' envv' envp' = ns_stm (Inter stm s envv envp)
+-- ---------------------------------------------
 
----------------------------------------------
-
-s_test1 = s_testx(s_dynamic s1''' (Final s2 s3 s4))
-s_test2 = s_testy(s_dynamic s1''' (Final s2 s3 s4))
-s_test3 = s_testz(s_dynamic s1'' (Final s2 s3 s4))
-s_testx::Config -> Integer
-s_testx (Inter stm state envp envv) = state "x"
-s_testx (Final state envv envp) = state "x"
-s_testy::Config -> Integer
-s_testy (Inter stm state envv envp) = state "y"
-s_testy (Final state envv envp) = state "y"
-s_testz::Config -> Integer
-s_testz (Inter stm state envv envp) = state "z"
-s_testz (Final state envv envp) = state "z"
+s_test1 = s_testx(s_dynamic s1' (Final_d def_state_d def_envp_d))
+s_test2 = s_testy(s_dynamic s1'' (Final_d def_state_d def_envp_d))
+s_test3 = s_testz(s_dynamic s1'' (Final_d def_state_d def_envp_d))
+s_testx::Config_d -> Integer
+s_testx (Inter_d stm state envp ) = state "x"
+s_testx (Final_d state envp) = state "x"
+s_testy::Config_d -> Integer
+s_testy (Inter_d stm state envp) = state "y"
+s_testy (Final_d state envp) = state "y"
+s_testz::Config_d -> Integer
+s_testz (Inter_d stm state envp) = state "z"
+s_testz (Final_d state envp) = state "z"
 
 
 s1 :: Stm
@@ -163,26 +148,9 @@ s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp
 s1''' :: Stm
 s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
 
+def_state_d :: State
+def_state_d "x" = 5
+def_state_d _ = 0
 
-s2 :: State
-s2 "x" = 5
-s2 _ = 0
-
-s3 :: EnvV
-s3 _ = 0
-
-s4 :: EnvP
-s4 _ = Skip
-
-
-------
-
-
-
-
-s_ds::Stm->State->State
-s_ds ( Ass v a ) s    = update s (a_val a s) v
-s_ds ( Skip ) s       = s
-s_ds ( Comp s1 s2 ) s = s_ds s2 (s_ds s1 s)
-s_ds ( If b s1 s2 ) s = undefined
-s_ds ( While b s1 ) s = undefined
+def_envp_d :: EnvP_d
+def_envp_d _ = Skip
