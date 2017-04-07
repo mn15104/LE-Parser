@@ -122,8 +122,9 @@ ns_stm_st (Inter_st (Block decv decp stm) s envv envp loc store olddecv)   = Fin
                                                               config' = updateV_st (Inter_st (Block decv decp stm) s envv envp loc store decv) decv -- update environment variables using decv
                                                             --  envv''' = (\v -> if((s v /= s'' v) && (decVcontainsV olddecv v)) then updatedloc else envv v)
                                                             --  updatedloc = if(envv''' == envv)  then new loc''  else loc''
-                                                            -- what if we only update envv instead of state, and when passing it back, let original_envv = (\v -> if (not(decVcontainsV newdecV v)) then oldenvv v else newenvv v)
-
+                                                            -- what if we *only update envv* instead of state, and when passing it back, let original_envv = (\v -> if (not(decVcontainsV branched_decV v)) then oldenvv v else newenvv v)
+                                                                                                                                                                    -- if branched function had v as local variable, then ignore it and restore and use the original envv for v
+                                                                                                                                                                    -- if branched function did not have v as local variable, then it possibly globally updated v, so use the updated envv
 
 
 
