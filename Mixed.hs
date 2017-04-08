@@ -38,17 +38,6 @@ b_val (Le a1 a2) s
   | a_val(a1)s <= a_val(a2)s  = True
   | otherwise = False
 
-
-cond :: ( a->T, a->a, a->a ) ->( a->a )
-cond (b, s1, s2) x  = if (b x) then (s1 x) else (s2 x)
-
-fix :: ((State->State)->(State->State))->(State->State)
-fix ff = ff (fix ff)
-
-
-
-
-
 -- new :: Loc -> Loc
 -- new n = n + 1
 ------------------------------------------
@@ -70,6 +59,10 @@ type DecP  = [(Pname,Stm)]
 type State = Var -> Z
 data EnvP_m = ENVP (Pname -> (Stm, EnvP_m))
 data Config_m   = Inter_m Stm State EnvP_m | Final_m State EnvP_m
+
+decVcontainsV :: [(Var, Aexp)] -> Var -> Bool
+decV `decVcontainsV` var = (var `elem` decV')
+                          where decV' = map fst decV
 
 update'::State->(Var, Aexp)->State
 update' s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s var' ) )
@@ -107,16 +100,17 @@ ns_stm_m (Inter_m (While bexp s1) s envp_m)
                                 Final_m s' envp_m' = ns_stm_m(Inter_m s1 s envp_m)
                                 Final_m s'' envp_m'' = ns_stm_m(Inter_m (While bexp s1) s' envp_m')
 
-ns_stm_m (Inter_m (Block decv decp stm) s envp_m)   = Final_m s'' envp_m''
+ns_stm_m (Inter_m (Block decv decp stm) s envp_m)   = Final_m s_restore envp_m''
                                               where
-                                              s'                          = update s decv
-                                              envp_m'                     = updateP_m envp_m decp
+                                              s'                     = update s decv          -- Update state mapping for P's local variables
+                                              envp_m'                = updateP_m envp_m decp  -- Update procedure mapping for P's procedures
                                               Final_m s'' envp_m''   = ns_stm_m(Inter_m stm s'  envp_m')
+                                              s_restore              = (\v -> if decVcontainsV decv v then s v else s'' v )
 
-ns_stm_m (Inter_m (Call pname) s (ENVP envp_m) )    =    ns_stm_m(Inter_m (stm') s  (recursive_envp_update) )
+ns_stm_m (Inter_m (Call pname) s (ENVP envp_m) )    =    ns_stm_m(Inter_m (p_stm) s  (envp_recurse) )
                                                     where
-                                                    (stm', envp_m')             = envp_m pname                      -- Get & use local environment of P
-                                                    recursive_envp_update       = updateP_m' (envp_m') (pname, stm')  -- When calling P, update its environment so it recognises itself
+                                                    (p_stm, p_environment)             = envp_m pname                        -- Get & use statically defined body of P
+                                                    envp_recurse      = updateP_m' (p_environment) (pname, p_stm)  -- When calling P, update its environment so it recognises itself
 
 s_mixed::Stm->Config_m->Config_m
 s_mixed   stm (Final_m s envp) = Final_m s' envp'
@@ -141,10 +135,10 @@ s1 :: Stm
 s1 = Block [("X", N 5)] [("foo", Skip)] Skip
 --Scope Test Page 53
 s1' :: Stm
-s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
+s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
 s1'' :: Stm
-s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Ass "y" (Mult (V "z") (V "y"))) (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Call "fac") (Ass "y" (Mult (V "z") (V "y"))) ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
 s1''' :: Stm
 s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))

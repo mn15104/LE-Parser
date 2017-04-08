@@ -63,6 +63,9 @@ type State = Var -> Z
 type EnvP_d    = Pname -> Stm
 data Config_d   = Inter_d Stm State EnvP_d | Final_d State EnvP_d
 
+decVcontainsV :: [(Var, Aexp)] -> Var -> Bool
+decV `decVcontainsV` var = (var `elem` decV')
+                          where decV' = map fst decV
 
 update'::State->(Var, Aexp)->State
 update' s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s var' ) )
@@ -97,11 +100,12 @@ ns_stm_d (Inter_d (While bexp s1) s envp)
                                 Final_d s'  envp' = ns_stm_d(Inter_d s1 s envp)
                                 Final_d s''  envp'' = ns_stm_d(Inter_d (While bexp s1) s' envp')
 
-ns_stm_d (Inter_d (Block decv decp stm) s envp)   = Final_d s'' envp''
+ns_stm_d (Inter_d (Block decv decp stm) s envp)   = Final_d s_restore envp''
                                               where
-                                              s'                = update s decv
-                                              envp'             = updateP_d envp decp
-                                              Final_d s'' envp''  = ns_stm_d(Inter_d stm s' envp')
+                                              s'                = update s decv       -- Update state mapping for P's local variables
+                                              envp'             = updateP_d envp decp -- Update procedure mapping for P's procedures
+                                              Final_d s'' envp''  = ns_stm_d(Inter_d stm s' envp')            -- Execute process and return any (dynamically) updated processes and variables
+                                              s_restore = (\v -> if decVcontainsV decv v then s v else s'' v ) -- Ignore local variable declarations in Block Process
 
 ns_stm_d (Inter_d (Call pname) s envp)      =     Final_d s' envp'
                                               where
@@ -114,7 +118,7 @@ s_dynamic stm (Final_d s envp) = Final_d s' envp'
 
 -- ---------------------------------------------
 
-s_test1 = s_testx(s_dynamic s1' (Final_d def_state_d def_envp_d))
+s_test1 = s_testx(s_dynamic s1'' (Final_d def_state_d def_envp_d))
 s_test2 = s_testy(s_dynamic s1'' (Final_d def_state_d def_envp_d))
 s_test3 = s_testz(s_dynamic s1'' (Final_d def_state_d def_envp_d))
 s_testx::Config_d -> Integer
@@ -135,7 +139,7 @@ s1' :: Stm
 s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
 
 s1'' :: Stm
-s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Ass "y" (Mult (V "z") (V "y"))) (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Call "fac") (Ass "y" (Mult (V "z") (V "y")))  ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
 s1''' :: Stm
 s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
