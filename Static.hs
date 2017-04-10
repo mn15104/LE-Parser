@@ -132,9 +132,9 @@ s_static stm (Final_st envv envp loc store decv) = ns_stm_st (Inter_st stm envv 
 ----------------------------------------------------------------------------------------
 ----------------------------- * STATIC TEST FUNCTIONS * --------------------------------
 
-s_test1_st = s_testx_st(s_static exercise_2_37 (dc))
-s_test2_st = s_testy_st(s_static exercise_2_37 (dc))
-s_test3_st = s_testz_st(s_static exercise_2_37 (dc))
+s_test1_st = s_testx_st(s_static fac_while (dc))
+s_test2_st = s_testy_st(s_static fac_while (dc))
+s_test3_st = s_testz_st(s_static fac_while (dc))
 
 s_test_n :: Integer -> Integer
 s_test_n n = store n
