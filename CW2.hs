@@ -117,7 +117,7 @@ is_semi [x] = x
 is_semi (x:xs) = Comp x (is_semi xs)
 
 stm' :: Parser Stm
-stm' =      parens stm'
+stm' =      parens stm
            <|> skipStm
            <|> call
            <|> block

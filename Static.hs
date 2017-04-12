@@ -114,15 +114,16 @@ ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store olddecv)   = Final
                                                               envv_reset = (\v -> if decVcontainsV decv v then envv v else envv'' v)
 
 ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    = Final_st envv_reset envp'' loc'' store'' decv
-                                                        where (stm', envv', envp') = envp pname                      -- Get & use local environment
-                                                              Final_st envv'' envp'' loc'' store'' decv'' =  ns_stm_st(Inter_st stm' envv' envp' loc store decv)
-                                                              envv_reset = (\v -> if decVcontainsV decv v then envv v else envv'' v)
+                                                        where (stm', envv', envp') = envp pname
+                                                              Final_st envv'' envp'' loc'' store'' decv'' = updateP_st'(Final_st envv' envp' loc store decv) (pname, stm')              -- Get & use local environment
+                                                              Final_st envv''' envp''' loc''' store''' decv''' =  ns_stm_st(Inter_st stm' envv' envp' loc'' store'' decv'')
+                                                              envv_reset = (\v -> if decVcontainsV decv v then envv v else envv''' v)
                                                                -- Update P's procedure environment to include itself
 
---
--- ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    ns_stm_st(Inter_st stm' envv' envp_recurse loc store)
---                                                         where (stm', envv', envp') = envp pname                      -- Get & use local environment
---                                                               Final_st envvr envp_recurse locr storer = updateP_st' (Final_st envv' envp' loc store) (pname, stm') -- Update P's procedure environment to include itself
+
+ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    =  ns_stm_st(Inter_st s1 envv' envp'' loc store decv) --  s_static_env s1 sto envp'' envv'
+                                  where (s1, envv', envp') = envp pname
+                                        envp'' = ENVP_st (concat (pname, (s1, envv', envp')) envp')
 
 
 s_static::Stm->Config_st->Config_st
@@ -132,9 +133,9 @@ s_static stm (Final_st envv envp loc store decv) = ns_stm_st (Inter_st stm envv 
 ----------------------------------------------------------------------------------------
 ----------------------------- * STATIC TEST FUNCTIONS * --------------------------------
 
-s_test1_st = s_testx_st(s_static fac_while (dc))
-s_test2_st = s_testy_st(s_static fac_while (dc))
-s_test3_st = s_testz_st(s_static fac_while (dc))
+s_test1_st = s_testx_st(s_static fac_recurse1 (dc))
+s_test2_st = s_testy_st(s_static fac_recurse1 (dc))
+s_test3_st = s_testz_st(s_static fac_recurse1 (dc))
 
 s_test_n :: Integer -> Integer
 s_test_n n = store n
@@ -161,7 +162,11 @@ scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
 fac_recurse :: Stm
-fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Ass "y" (Mult (V "z") (V "y")))  (Call "fac") ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+
+fac_recurse1 :: Stm
+fac_recurse1 = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "fac")  )))] (Comp (Ass "y" (N 1)) (Call "fac"))
+
 
 fac_while:: Stm
 fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
