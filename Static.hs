@@ -93,8 +93,13 @@ ns_stm_st (Inter_st (Comp s1 s2) envv envp loc store decv)     =   Final_st envv
                                               Final_st envv' envp' loc' store' decv'    = ns_stm_st(Inter_st s1 envv envp loc store decv )
                                               Final_st envv'' envp'' loc'' store''  decv'' = ns_stm_st(Inter_st s2 envv' envp' loc' store' decv')
 
-ns_stm_st (Inter_st (Ass var aexp) envv envp loc store decv) = updateV_st (Inter_st (Ass var aexp) envv envp loc store decv) ([(var, aexp)])             -- update local variable
+--ns_stm_st (Inter_st (Ass var aexp) envv envp loc store decv) = updateV_st (Inter_st (Ass var aexp) envv envp loc store decv) ([(var, aexp)])             -- update local variable
 
+ns_stm_st (Inter_st (Ass var aexp) envv envp loc store decv) =  Final_st envv envp loc store' decv
+                                                  where
+                                                  location = envv var
+                                                  store' = (\l -> if l == location then a_val_static aexp (Inter_st (Ass var aexp) envv envp loc store decv)
+                                                                  else store l)
 
 ns_stm_st (Inter_st (If bexp s1 s2) envv envp loc store decv)
     | b_val_static bexp (Inter_st (If bexp s1 s2) envv envp loc store decv )   = ns_stm_st(Inter_st s1 envv envp loc store decv)
@@ -107,24 +112,33 @@ ns_stm_st (Inter_st (While bexp s1) envv envp loc store decv)
                                 Final_st envv' envp' loc' store'  decv'   = ns_stm_st(Inter_st s1 envv envp loc store decv)
                                 Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st (While bexp s1) envv' envp' loc' store' decv')
 
-ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store olddecv)   = Final_st envv_reset envp'' loc'' store'' olddecv
-                                                        where config_v = updateV_st (Inter_st (Block decv decp stm) envv envp loc store olddecv) decv  -- use local variables using decv
-                                                              Final_st envv' envp' loc' store' decv' = updateP_st (config_v) decp        -- update environment procedure
-                                                              Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm envv' envp' loc' store' decv)
-                                                              envv_reset = (\v -> if decVcontainsV decv v then envv v else envv'' v)
+-- ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store olddecv)    = ns_stm_st(Inter_st stm envv' envp' loc' store' decv') --Final_st envv envp'' loc'' store'' olddecv
+--                                                         where config_v = updateV_st (Inter_st (Block decv decp stm) envv envp loc store olddecv) decv  -- use local variables using decv
+--                                                               Final_st envv' envp' loc' store' decv' = updateP_st (config_v) decp        -- update environment procedure
+--                                                             --  Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm envv' envp' loc' store' decv')
+--                                                             --  envv_reset = (\v -> if decVcontainsV decv v then envv v else envv'' v)
 
-ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    = Final_st envv_reset envp'' loc'' store'' decv
-                                                        where (stm', envv', envp') = envp pname
-                                                              Final_st envv'' envp'' loc'' store'' decv'' = updateP_st'(Final_st envv' envp' loc store decv) (pname, stm')              -- Get & use local environment
-                                                              Final_st envv''' envp''' loc''' store''' decv''' =  ns_stm_st(Inter_st stm' envv' envp' loc'' store'' decv'')
-                                                              envv_reset = (\v -> if decVcontainsV decv v then envv v else envv''' v)
+ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store olddecv)   = Final_st envv envp'' loc'' store'' olddecv
+                                                        where config' = updateV_st (Inter_st (Block decv decp stm) envv envp loc store olddecv) decv  -- use local variables using decv
+                                                              Final_st envv' envp' loc' store' decv' = updateP_st config' decp        -- update environment procedure
+                                                              Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm envv' envp' loc' store' decv')
+
+
+--ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    = ns_stm_st(Inter_st stm' envv' envp' loc store decv)
+--                                                        where (stm', envv', envp') = envp pname
+                                                              --Final_st envv'' envp'' loc'' store'' decv'' = updateP_st(Final_st envv' envp' loc store decv) [(pname, stm')]              -- Get & use local environment
+                                                              --Final_st envv''' envp''' loc''' store''' decv''' =  ns_stm_st(Inter_st stm' envv'' envp'' loc'' store'' decv'')
+                                                              --envv_reset = (\v -> if decVcontainsV decv v then envv v else envv''' v)
                                                                -- Update P's procedure environment to include itself
 
+ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    =    Final_st envv envp'' loc'' store'' decv
+                                                       where (stm', envv', envp') = envp pname                      -- Get & use local environment
+                                                             Final_st envvr envp_recurse locr storer decvr = updateP_st' (Final_st envv' envp' loc store decv) (pname, stm') -- Update P's procedure environment to include itself
+                                                             Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm' envv' envp_recurse loc store decvr)
 
-ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    =  ns_stm_st(Inter_st s1 envv' envp'' loc store decv) --  s_static_env s1 sto envp'' envv'
-                                  where (s1, envv', envp') = envp pname
-                                        envp'' = ENVP_st (concat (pname, (s1, envv', envp')) envp')
 
+concatP :: (Eq a) => (a, b) -> (a -> b) -> (a -> b)
+concatP (a, b) f = \x -> if (x == a) then b else f x
 
 s_static::Stm->Config_st->Config_st
 s_static stm (Final_st envv envp loc store decv) = ns_stm_st (Inter_st stm envv envp loc store decv)
@@ -133,13 +147,14 @@ s_static stm (Final_st envv envp loc store decv) = ns_stm_st (Inter_st stm envv 
 ----------------------------------------------------------------------------------------
 ----------------------------- * STATIC TEST FUNCTIONS * --------------------------------
 
-s_test1_st = s_testx_st(s_static fac_recurse1 (dc))
-s_test2_st = s_testy_st(s_static fac_recurse1 (dc))
-s_test3_st = s_testz_st(s_static fac_recurse1 (dc))
+s_test1_st = s_testx_st(s_static exercise_2_37 (dc))
+s_test2_st = s_testy_st(s_static exercise_2_37 (dc))
+s_test3_st = s_testz_st(s_static exercise_2_37 (dc))
+s_test4_st = s_testa_st(s_static exercise_2_37 (dc))
 
 s_test_n :: Integer -> Integer
 s_test_n n = store n
-                where (Final_st envv envp loc store decv) = s_static exercise_2_37 dc
+                where (Final_st envv envp loc store decv) = s_static fac_recurse dc
 
 s_get_store_st::Config_st->Integer->Integer
 s_get_store_st (Inter_st stm envv envp loc store decv) n  = store(n)
@@ -154,12 +169,18 @@ s_testy_st (Final_st envv envp loc store decv) = store (envv "y")
 s_testz_st::Config_st -> Integer
 s_testz_st (Inter_st stm envv envp loc store decv) = store (envv "z")
 s_testz_st (Final_st envv envp loc store decv) = store (envv "z")
-
+s_testa_st::Config_st -> Integer
+s_testa_st (Inter_st stm envv envp loc store decv) = store (envv "a")
+s_testa_st (Final_st envv envp loc store decv) = store (envv "a")
 ----------------------------------------------------------------------------------
 ----------------------------- * TEST STATEMENTS * --------------------------------
 
 scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
+
+scope_test2 :: Stm
+scope_test2 = Block [("x",N 0)] [("p",Ass "z"  (N 2)),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
+
 
 fac_recurse :: Stm
 fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
@@ -185,17 +206,22 @@ dc = Final_st def_envv_st def_envp_st def_loc_st def_store_st decv
 decv = []
 
 def_envv_st :: EnvV
---def_envv_st "x" = 0
-def_envv_st _ = -1
+def_envv_st "x" = 0
+def_envv_st "y" = 1
+def_envv_st "z" = 2
+def_envv_st _   = 3
 
 def_envp_st :: EnvP_st
 def_envp_st = ENVP_st (\pname -> (Skip, def_envv_st, def_envp_st))
 
 def_loc_st :: Loc
-def_loc_st = 0
+def_loc_st = 3
 
+--globals
 def_store_st :: Store
---def_store_st 0 = 5
+def_store_st 0 = 10  -- x
+def_store_st 1 = 20  -- y
+def_store_st 2 = 30  -- z
 def_store_st _ = -1
 
 ------------------------------------------------------------------------------

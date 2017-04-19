@@ -117,9 +117,9 @@ s_mixed   stm (Final_m s envp) = Final_m s' envp'
           where
           Final_m s'  envp' = ns_stm_m (Inter_m stm s envp)
 
-s_test1_m = s_testx_m(s_mixed s1' (Final_m def_state_m def_envp_m))
-s_test2_m = s_testy_m(s_mixed s1' (Final_m def_state_m def_envp_m))
-s_test3_m = s_testz_m(s_mixed s1' (Final_m def_state_m def_envp_m))
+s_test1_m = s_testx_m(s_mixed exercise_2_37 (Final_m def_state_m def_envp_m))
+s_test2_m = s_testy_m(s_mixed exercise_2_37 (Final_m def_state_m def_envp_m))
+s_test3_m = s_testz_m(s_mixed exercise_2_37 (Final_m def_state_m def_envp_m))
 s_testx_m::Config_m -> Integer
 s_testx_m (Inter_m stm state envp_m) = state "x"
 s_testx_m (Final_m state envp_m) = state "x"
@@ -142,6 +142,8 @@ s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp
 
 s1''' :: Stm
 s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+exercise_2_37 :: Stm
+exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
 
 def_state_m :: State
 def_state_m "x" = 5
