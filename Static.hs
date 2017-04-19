@@ -93,12 +93,18 @@ ns_stm_st (Inter_st (Comp s1 s2) envv envp loc store decv)     =   Final_st envv
                                               Final_st envv' envp' loc' store' decv'    = ns_stm_st(Inter_st s1 envv envp loc store decv )
                                               Final_st envv'' envp'' loc'' store''  decv'' = ns_stm_st(Inter_st s2 envv' envp' loc' store' decv')
 
+<<<<<<< HEAD
 --ns_stm_st (Inter_st (Ass var aexp) envv envp loc store decv) = updateV_st (Inter_st (Ass var aexp) envv envp loc store decv) ([(var, aexp)])             -- update local variable
 
 ns_stm_st (Inter_st (Ass var aexp) envv envp loc store decv) =  Final_st envv envp loc store' decv
                                                   where
                                                   location = envv var
                                                   store' = (\l -> if l == location then a_val_static aexp (Inter_st (Ass var aexp) envv envp loc store decv)
+=======
+ns_stm_st (Inter_st (Ass var aexp) envv envp loc store) =  Final_st envv envp loc store' 
+                                                  where location = envv var
+                                                  store' = (\l -> if l == location then a_val_static aexp (Inter_st stm envv envp loc store)
+>>>>>>> 73ce63e5f0dc2cab680328172c8eed5bd660eea0
                                                                   else store l)
 
 ns_stm_st (Inter_st (If bexp s1 s2) envv envp loc store decv)
@@ -109,8 +115,19 @@ ns_stm_st (Inter_st (While bexp s1) envv envp loc store decv)
     | not (b_val_static bexp (Inter_st (While bexp s1) envv envp loc store decv))      = Final_st envv envp loc store decv
     | otherwise               = Final_st envv'' envp'' loc'' store'' decv
                                 where
+<<<<<<< HEAD
                                 Final_st envv' envp' loc' store'  decv'   = ns_stm_st(Inter_st s1 envv envp loc store decv)
                                 Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st (While bexp s1) envv' envp' loc' store' decv')
+=======
+                                Final_st envv' envp' loc' store'     = ns_stm_st(Inter_st s1 envv envp loc store)
+                                Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st (While bexp s1) envv' envp' loc' store')
+-- State holds global variables
+ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store)   = Final_st envv envp'' loc'' store''
+                                                        where config' = updateV_st (Inter_st (Block decv decp stm) envv envp loc store) decv  -- use local variables using decv
+                                                              Final_st envv' envp' loc' store'  = updateP_st config' decp        -- update environment procedure
+                                                              Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm envv' envp' loc' store')
+                                                              
+>>>>>>> 73ce63e5f0dc2cab680328172c8eed5bd660eea0
 
 -- ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store olddecv)    = ns_stm_st(Inter_st stm envv' envp' loc' store' decv') --Final_st envv envp'' loc'' store'' olddecv
 --                                                         where config_v = updateV_st (Inter_st (Block decv decp stm) envv envp loc store olddecv) decv  -- use local variables using decv
@@ -123,6 +140,7 @@ ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store olddecv)   = Final
                                                               Final_st envv' envp' loc' store' decv' = updateP_st config' decp        -- update environment procedure
                                                               Final_st envv'' envp'' loc'' store'' decv'' = ns_stm_st(Inter_st stm envv' envp' loc' store' decv')
 
+<<<<<<< HEAD
 
 --ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    = ns_stm_st(Inter_st stm' envv' envp' loc store decv)
 --                                                        where (stm', envv', envp') = envp pname
@@ -139,6 +157,12 @@ ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store decv)    =    Fin
 
 concatP :: (Eq a) => (a, b) -> (a -> b) -> (a -> b)
 concatP (a, b) f = \x -> if (x == a) then b else f x
+=======
+ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    Final envv envp'' loc'' store'' 
+                                                        where (stm', envv', envp') = envp pname                      -- Get & use local environment
+                                                              Final_st envvr envp_recurse locr storer = updateP_st' (Final_st envv' envp' loc store) (pname, stm') -- Update P's procedure environment to include itself
+                                                              Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm' envv' envp_recurse loc store)
+>>>>>>> 73ce63e5f0dc2cab680328172c8eed5bd660eea0
 
 s_static::Stm->Config_st->Config_st
 s_static stm (Final_st envv envp loc store decv) = ns_stm_st (Inter_st stm envv envp loc store decv)
@@ -206,10 +230,15 @@ dc = Final_st def_envv_st def_envp_st def_loc_st def_store_st decv
 decv = []
 
 def_envv_st :: EnvV
+<<<<<<< HEAD
 def_envv_st "x" = 0
 def_envv_st "y" = 1
 def_envv_st "z" = 2
 def_envv_st _   = 3
+=======
+def_envv_st "y" = -5
+def_envv_st _ = 0
+>>>>>>> 73ce63e5f0dc2cab680328172c8eed5bd660eea0
 
 def_envp_st :: EnvP_st
 def_envp_st = ENVP_st (\pname -> (Skip, def_envv_st, def_envp_st))
@@ -219,9 +248,14 @@ def_loc_st = 3
 
 --globals
 def_store_st :: Store
+<<<<<<< HEAD
 def_store_st 0 = 10  -- x
 def_store_st 1 = 20  -- y
 def_store_st 2 = 30  -- z
 def_store_st _ = -1
 
+=======
+def_store_st -5 = 100
+def_store_st _ = 0
+>>>>>>> 73ce63e5f0dc2cab680328172c8eed5bd660eea0
 ------------------------------------------------------------------------------
