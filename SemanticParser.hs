@@ -3,15 +3,6 @@ import Prelude hiding (Num)
 import System.IO
 import Control.Monad
 
-
---s_static :: Stm -> State -> State
-
--- MAKE EVERYTHING NATURAL.
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/semanticsLab6.pdf
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/semanticsCwk2.pdf
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/semanticsLec6.pdf
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/nielson.pdf
-
 n_val::Num -> Z
 n_val n = n
 
@@ -38,13 +29,6 @@ b_val (Le a1 a2) s
   | a_val(a1)s <= a_val(a2)s  = True
   | otherwise = False
 
-
-
-
--- new :: Loc -> Loc
--- new n = n + 1
-------------------------------------------
-
 data Aexp = N Num | V Var| Mult Aexp Aexp | Add Aexp Aexp | Sub Aexp Aexp
       deriving (Show, Eq, Read)
 data Bexp = TRUE | FALSE | Neg Bexp | And Bexp Bexp | Le Aexp Aexp | Eq Aexp Aexp
@@ -56,7 +40,6 @@ type Var   = String
 type Pname = String
 type Z = Integer
 type T = Bool
--- type Loc = Num
 type DecV  = [(Var,Aexp)]
 type DecP  = [(Pname,Stm)]
 type State = Var -> Z

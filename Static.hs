@@ -49,7 +49,6 @@ type Store = Loc -> Z     -- Mapping #2: Associates a variable value with a loca
 type DecV  = [(Var,Aexp)]
 type DecP  = [(Pname,Stm)]
 type State = Var -> Z
-
 data EnvP_st = ENVP_st (Pname -> (Stm, EnvV, EnvP_st))
 data Config_st   = Inter_st Stm EnvV EnvP_st Loc Store  | Final_st EnvV EnvP_st Loc Store
 
@@ -81,10 +80,6 @@ updateP_st' (Final_st envv envp loc store ) (pname, stm) = Final_st envv envp' l
 updateP_st::Config_st->DecP->Config_st
 updateP_st config decp = foldl updateP_st' config decp
 
-decVcontainsV :: [(Var, Aexp)] -> Var -> Bool
-decV `decVcontainsV` var = (var `elem` decV')
-                          where decV' = map fst decV
-
 ns_stm_st :: Config_st -> Config_st
 ns_stm_st (Inter_st (Skip) envv envp loc store )           =   Final_st envv envp loc store
 
@@ -92,9 +87,6 @@ ns_stm_st (Inter_st (Comp s1 s2) envv envp loc store )     =   Final_st envv'' e
                                               where
                                               Final_st envv' envp' loc' store'     = ns_stm_st(Inter_st s1 envv envp loc store  )
                                               Final_st envv'' envp'' loc'' store''   = ns_stm_st(Inter_st s2 envv' envp' loc' store' )
-
-
---ns_stm_st (Inter_st (Ass var aexp) envv envp loc store decv) = updateV_st (Inter_st (Ass var aexp) envv envp loc store decv) ([(var, aexp)])             -- update local variable
 
 ns_stm_st (Inter_st (Ass var aexp) envv envp loc store ) =  Final_st envv envp loc store'
                                                   where
@@ -125,64 +117,130 @@ ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    Final_s
                                                              Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm' envv' envp_recurse loc store )
 
 
-concatP :: (Eq a) => (a, b) -> (a -> b) -> (a -> b)
-concatP (a, b) f = \x -> if (x == a) then b else f x
 
+
+----------------------------------------------------------------------------------------
+----------------------------- * STATIC: SYNTACTIC ANALYSIS * --------------------------------
+
+analyse_decv::DecV->(State,EnvV,Loc,Store)->(State,EnvV,Loc,Store)
+analyse_decv decv (state, envv, loc, store) = foldl analyse_decv' (state, envv, loc, store) decv
+
+analyse_decv'::(State,EnvV,Loc,Store)->(Var, Aexp)->(State,EnvV,Loc,Store)
+analyse_decv' (state, envv, loc, store) (var, aexp) = (state, envv', loc', store')
+                            where loc' = new loc;                    -- inside current procedure A
+                                  envv' = (\var' -> if (var == var')    -- update current environment's variable to location mapping -- difference between decv and assign, i.e. updateV_st and update, only decv is static inside a procedure
+                                                    then loc            -- variables inside a begin decv s end block are static to it
+                                                    else ( envv var' ))
+                                  store' = (\n -> if (n == loc) -- update global store to hold the aexp using the original envv - e.g. x := x + 1, we have to evaluate the RHS x with the original envv
+                                                    then state var
+                                                    else store n)
+
+analyse_decp::DecP->(State,EnvV,Loc,Store)->(State,EnvV,Loc,Store)
+analyse_decp decp (state, envv, loc, store) = foldl analyse_decp' (state, envv, loc, store) decp
+
+analyse_decp'::(State,EnvV,Loc,Store)->(Pname,Stm)->(State,EnvV,Loc,Store)
+analyse_decp' (state, envv, loc, store) (pname, stm) = analyse_stm stm (state, envv, loc, store)
+
+analyse_aexp::Aexp->(State,EnvV,Loc,Store)->(State,EnvV,Loc,Store)
+analyse_aexp (N num) (state, envv, loc, store) = (state, envv, loc, store)
+analyse_aexp (V var) (state, envv, loc, store) = (state, envv', loc', store')
+                            where loc' = new loc;                    -- inside current procedure A
+                                  envv' = (\var' -> if (var == var')    -- update current environment's variable to location mapping -- difference between decv and assign, i.e. updateV_st and update, only decv is static inside a procedure
+                                                    then loc            -- variables inside a begin decv s end block are static to it
+                                                    else ( envv var' ))
+                                  store' = (\n -> if (n == loc) -- update global store to hold the aexp using the original envv - e.g. x := x + 1, we have to evaluate the RHS x with the original envv
+                                                    then state var
+                                                    else store n)
+analyse_aexp (Mult a1 a2) (state, envv, loc, store) = analyse_aexp a2 (state, envv', loc', store')
+                                                where (state', envv', loc', store') = analyse_aexp a1 (state, envv, loc, store)
+analyse_aexp (Add a1 a2) (state, envv, loc, store) = analyse_aexp a2 (state, envv', loc', store')
+                                                where (state', envv', loc', store') = analyse_aexp a1 (state, envv, loc, store)
+analyse_aexp (Sub a1 a2) (state, envv, loc, store) = analyse_aexp a2 (state, envv', loc', store')
+                                                where (state', envv', loc', store') = analyse_aexp a1 (state, envv, loc, store)
+
+analyse_bexp::Bexp->(State,EnvV,Loc,Store)->(State,EnvV,Loc,Store)
+analyse_bexp (TRUE) (state, envv, loc, store) = (state, envv, loc, store)
+analyse_bexp (FALSE) (state, envv, loc, store) = (state, envv, loc, store)
+analyse_bexp (Neg b) (state, envv, loc, store) = analyse_bexp b (state, envv, loc, store)
+analyse_bexp (And b1 b2) (state, envv, loc, store) = analyse_bexp b2 (state, envv', loc', store')
+                                                where (state', envv', loc', store') = analyse_bexp b1 (state, envv, loc, store)
+analyse_bexp (Le a1 a2) (state, envv, loc, store) = analyse_aexp a2 (state, envv', loc', store')
+                                                where (state', envv', loc', store') = analyse_aexp a2 (state, envv, loc, store)
+analyse_bexp (Eq a1 a2) (state, envv, loc, store) = analyse_aexp a2 (state, envv', loc', store')
+                                                where (state', envv', loc', store') = analyse_aexp a2 (state, envv, loc, store)
+
+analyse_stm::Stm->(State,EnvV,Loc,Store)->(State,EnvV,Loc,Store)
+
+analyse_stm Skip (state, envv, loc, store) = (state, envv, loc, store)
+
+analyse_stm (Comp s1 s2) (state, envv, loc, store) = analyse_stm s2 (state ,envv', loc', store')
+                                    where (state', envv', loc', store') = analyse_stm s1 (state ,envv, loc, store)
+
+analyse_stm (Ass var aexp) (state, envv, loc, store)  = (state, envv'', loc'', store'')
+                                    where envv' = (\v -> if v == var then loc else envv v)
+                                          store' = (\n -> if n == loc then state var else store n)
+                                          loc' = new loc
+                                          (state'', envv'', loc'', store'') = analyse_aexp aexp (state, envv', loc', store')
+
+analyse_stm (If bexp s1 s2) (state, envv, loc, store) =  analyse_stm s2 (state, envv'', loc'', store'')
+                                    where (state', envv', loc', store') = analyse_bexp bexp (state, envv, loc, store)
+                                          (state'', envv'', loc'', store'') = analyse_stm s1 (state', envv', loc', store')
+
+analyse_stm (While bexp s) (state, envv, loc, store) = analyse_stm s (state', envv', loc', store')
+                                    where (state', envv', loc', store') = analyse_bexp bexp (state, envv, loc, store)
+
+analyse_stm (Block decv decp s) (state, envv, loc, store) = analyse_stm s (state'', envv'', loc'', store'')
+                                                  where (state', envv', loc', store') = analyse_decv decv (state, envv, loc, store)
+                                                        (state'', envv'', loc'', store'') = analyse_decp decp (state, envv', loc', store')
+
+analyse_stm (Call pname) (state, envv, loc, store) = (state, envv, loc, store)
+
+
+an_test_store :: Var -> Integer
+an_test_store v = store(envv v)
+          where (state, envv, loc, store) = analyse_test
+
+an_test_loc :: Var -> Integer
+an_test_loc v = (envv v)
+          where (state, envv, loc, store) = analyse_test
+
+analyse_test = analyse_stm fac_recurse (def_state_st, def_envv_st, def_loc_st, def_store_st)
+
+----------------------------------------------------------------------------------------
+----------------------------- * STATIC TEST FUNCTIONS * --------------------------------
+var_state_v2::Var -> Stm -> Integer
+var_state_v2 v stm = final_state v
+          where final_state = s_static_v2 stm def_state_st
+
+s_static_v2::Stm->State->State
+s_static_v2 stm state = state''
+                where (state', envv', loc', store') = analyse_stm stm (state, def_envv_st, def_loc_st, def_store_st)
+                      Final_st envv'' envp'' loc'' store'' = s_static stm (Final_st envv' def_envp_st loc' store')
+                      state'' = (\v -> store''(envv'' v))
 
 s_static::Stm->Config_st->Config_st
 s_static stm (Final_st envv envp loc store ) = ns_stm_st (Inter_st stm envv envp loc store )
 
+var_state::Var -> Stm -> Integer
+var_state v stm = store(envv v)
+          where (Final_st envv envp loc store ) = s_static stm default_config
 
-----------------------------------------------------------------------------------------
------------------------------ * STATIC TEST FUNCTIONS * --------------------------------
+var_location::Var -> Stm -> Integer
+var_location v stm = envv v
+          where (Final_st envv envp loc store ) = s_static stm default_config
 
-s_test1_st = s_testx_st(s_static fac_recurse (dc))
-s_test2_st = s_testy_st(s_static fac_recurse (dc))
-s_test3_st = s_testz_st(s_static fac_recurse (dc))
-s_test4_st = s_testa_st(s_static exercise_2_37 (dc))
 
-s_test_n :: Integer -> Integer
-s_test_n n = store n
-                where (Final_st envv envp loc store ) = s_static fac_recurse dc
-
-s_get_store_st::Config_st->Integer->Integer
-s_get_store_st (Inter_st stm envv envp loc store ) n  = store(n)
-s_get_store_st (Final_st envv envp loc store ) n = store(n)
-
-s_testx_st::Config_st -> Integer
-s_testx_st (Inter_st stm envv envp loc store ) = store (envv "x")
-s_testx_st (Final_st envv envp loc store ) = store (envv "x")
-s_testy_st::Config_st -> Integer
-s_testy_st (Inter_st stm envv envp loc store ) = store (envv "y")
-s_testy_st (Final_st envv envp loc store ) = store (envv "y")
-s_testz_st::Config_st -> Integer
-s_testz_st (Inter_st stm envv envp loc store ) = store (envv "z")
-s_testz_st (Final_st envv envp loc store ) = store (envv "z")
-s_testa_st::Config_st -> Integer
-s_testa_st (Inter_st stm envv envp loc store ) = store (envv "a")
-s_testa_st (Final_st envv envp loc store ) = store (envv "a")
 ----------------------------------------------------------------------------------
 ----------------------------- * TEST STATEMENTS * --------------------------------
 
 scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
-scope_test2 :: Stm
-scope_test2 = Block [("x",N 0)] [("p",Ass "z"  (N 2)),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
-
-
 fac_recurse :: Stm
 fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
-fac_recurse1 :: Stm
-fac_recurse1 = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "fac")  )))] (Comp (Ass "y" (N 1)) (Call "fac"))
-
-
 fac_while:: Stm
 fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
-
-my_test :: Stm
-my_test = Comp (Ass "z" (V "x")) (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Ass "y" (Sub (V "z") (V "y")))))
 
 exercise_2_37 :: Stm
 exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
@@ -190,29 +248,27 @@ exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 
 ----------------------------------------------------------------------------------
 ------------------------- * STATIC DEFAULT CONFIGURATION * -----------------------
 
-dc = Final_st def_envv_st def_envp_st def_loc_st def_store_st
-
-
+default_config = Final_st def_envv_st def_envp_st def_loc_st def_store_st
 
 def_envv_st :: EnvV
-def_envv_st "x" = 0
-def_envv_st "y" = 1
-def_envv_st "z" = 2
-def_envv_st _   = 3
-
+def_envv_st _   = -1
 
 def_envp_st :: EnvP_st
 def_envp_st = ENVP_st (\pname -> (Skip, def_envv_st, def_envp_st))
 
 def_loc_st :: Loc
-def_loc_st = 3
+def_loc_st = 0
 
 --globals
 def_store_st :: Store
-def_store_st 0 = 10  -- x
-def_store_st 1 = 20  -- y
-def_store_st 2 = 30  -- z
 def_store_st _ = -1
+
+
+def_state_st :: State
+def_state_st "x" = 5;
+def_state_st "y" = 10;
+def_state_st "z" = 15;
+def_state_st _ = 100;
 
 
 ------------------------------------------------------------------------------
