@@ -49,11 +49,6 @@ integer    = Token.integer    lexer -- parses an integer
 semi       = Token.semi       lexer -- parses a semicolon
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
-
-
-
---"(Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y"(Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))"
-
 -- AEXP --
 
 aExp :: Parser Aexp

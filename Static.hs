@@ -195,39 +195,26 @@ analyse_stm (Block decv decp s) (state, envv, loc, store) = analyse_stm s (state
 
 analyse_stm (Call pname) (state, envv, loc, store) = (state, envv, loc, store)
 
-
-an_test_store :: Var -> Integer
-an_test_store v = store(envv v)
-          where (state, envv, loc, store) = analyse_test
-
-an_test_loc :: Var -> Integer
-an_test_loc v = (envv v)
-          where (state, envv, loc, store) = analyse_test
-
-analyse_test = analyse_stm fac_recurse (def_state_st, def_envv_st, def_loc_st, def_store_st)
-
 ----------------------------------------------------------------------------------------
 ----------------------------- * STATIC TEST FUNCTIONS * --------------------------------
-var_state_v2::Var -> Stm -> Integer
-var_state_v2 v stm = final_state v
-          where final_state = s_static_v2 stm def_state_st
 
-s_static_v2::Stm->State->State
-s_static_v2 stm state = state''
-                where (state', envv', loc', store') = analyse_stm stm (state, def_envv_st, def_loc_st, def_store_st)
-                      Final_st envv'' envp'' loc'' store'' = s_static stm (Final_st envv' def_envp_st loc' store')
-                      state'' = (\v -> store''(envv'' v))
+s_static::Stm->State->State           -- State transformer
+s_static stm state = final_state
+          where (state', envv', loc', store') = analyse_stm stm (state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
+                Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')  -- Execute program
+                final_state = (\v -> store''(envv'' v))                                                       -- Return new state
 
-s_static::Stm->Config_st->Config_st
-s_static stm (Final_st envv envp loc store ) = ns_stm_st (Inter_st stm envv envp loc store )
+s_static'::Stm->Config_st->Config_st  -- Configuration transformer
+s_static' stm (Final_st envv envp loc store ) = ns_stm_st (Inter_st stm envv envp loc store )
 
-var_state::Var -> Stm -> Integer
-var_state v stm = store(envv v)
-          where (Final_st envv envp loc store ) = s_static stm default_config
+var_state_st::Var -> Stm -> Integer      -- Variable state tester  -- Using Default Config
+var_state_st v stm = final_state v
+          where final_state = s_static stm default_state_st
 
-var_location::Var -> Stm -> Integer
-var_location v stm = envv v
-          where (Final_st envv envp loc store ) = s_static stm default_config
+var_location_st::Var -> Stm -> Integer    -- Variable location tester  -- Using Default Config
+var_location_st v stm = envv'' v
+          where (state', envv', loc', store') = analyse_stm stm (default_state_st, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
+                Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')
 
 
 ----------------------------------------------------------------------------------
@@ -248,27 +235,26 @@ exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 
 ----------------------------------------------------------------------------------
 ------------------------- * STATIC DEFAULT CONFIGURATION * -----------------------
 
-default_config = Final_st def_envv_st def_envp_st def_loc_st def_store_st
+default_config_st = Final_st default_envv_st default_envp_st default_loc_st default_store_st
 
-def_envv_st :: EnvV
-def_envv_st _   = -1
+default_envv_st :: EnvV
+default_envv_st _   = -1
 
-def_envp_st :: EnvP_st
-def_envp_st = ENVP_st (\pname -> (Skip, def_envv_st, def_envp_st))
+default_envp_st :: EnvP_st
+default_envp_st = ENVP_st (\pname -> (Skip, default_envv_st, default_envp_st))
 
-def_loc_st :: Loc
-def_loc_st = 0
+default_loc_st :: Loc
+default_loc_st = 0
 
 --globals
-def_store_st :: Store
-def_store_st _ = -1
+default_store_st :: Store
+default_store_st _ = -1
 
-
-def_state_st :: State
-def_state_st "x" = 5;
-def_state_st "y" = 10;
-def_state_st "z" = 15;
-def_state_st _ = 100;
+default_state_st :: State
+default_state_st "x" = 7;
+default_state_st "y" = 8;
+default_state_st "z" = 9;
+default_state_st _ = 100;
 
 
 ------------------------------------------------------------------------------

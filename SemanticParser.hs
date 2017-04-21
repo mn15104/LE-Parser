@@ -94,42 +94,40 @@ ns_stm_d (Inter_d (Call pname) s envp)      =     Final_d s' envp'
                                               where
                                               Final_d s' envp'  = ns_stm_d(Inter_d (envp pname) s envp)
 
-s_dynamic::Stm->Config_d->Config_d
-s_dynamic stm (Final_d s envp) = Final_d s' envp'
+----------------------------------------------------------------------------------
+----------------------------- * DYNAMIC * ----------------------------------------
+
+s_dynamic::Stm->State->State
+s_dynamic stm state = final_state
           where
-          Final_d s' envp' = ns_stm_d (Inter_d stm s envp)
+          Final_d final_state final_envp = ns_stm_d (Inter_d stm state default_envp_d)
 
--- ---------------------------------------------
-
-s_test1 = s_testx(s_dynamic s1'' (Final_d def_state_d def_envp_d))
-s_test2 = s_testy(s_dynamic s1'' (Final_d def_state_d def_envp_d))
-s_test3 = s_testz(s_dynamic s1'' (Final_d def_state_d def_envp_d))
-s_testx::Config_d -> Integer
-s_testx (Inter_d stm state envp ) = state "x"
-s_testx (Final_d state envp) = state "x"
-s_testy::Config_d -> Integer
-s_testy (Inter_d stm state envp) = state "y"
-s_testy (Final_d state envp) = state "y"
-s_testz::Config_d -> Integer
-s_testz (Inter_d stm state envp) = state "z"
-s_testz (Final_d state envp) = state "z"
+var_state_d::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
+var_state_d v stm = final_state v
+          where final_state = s_dynamic stm default_state_d
 
 
-s1 :: Stm
-s1 = Block [("X", N 5)] [("foo", Skip)] Skip
+----------------------------------------------------------------------------------
+----------------------------- * TEST STATEMENTS * --------------------------------
 
-s1' :: Stm
-s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Call "q"))
+scope_test :: Stm
+scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
-s1'' :: Stm
-s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Call "fac") (Ass "y" (Mult (V "z") (V "y")))  ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+fac_recurse :: Stm
+fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
-s1''' :: Stm
-s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+fac_while:: Stm
+fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
 
-def_state_d :: State
-def_state_d "x" = 5
-def_state_d _ = 0
+exercise_2_37 :: Stm
+exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
 
-def_envp_d :: EnvP_d
-def_envp_d _ = Skip
+----------------------------------------------------------------------------------
+------------------------- * DYNAMIC DEFAULT CONFIGURATION * -----------------------
+
+default_state_d :: State
+default_state_d "x" = 5
+default_state_d _ = 0
+
+default_envp_d :: EnvP_d
+default_envp_d _ = Skip

@@ -4,14 +4,6 @@ import System.IO
 import Control.Monad
 
 
---s_static :: Stm -> State -> State
-
--- MAKE EVERYTHING NATURAL.
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/semanticsLab6.pdf
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/semanticsCwk2.pdf
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/semanticsLec6.pdf
--- https://www.cs.bris.ac.uk/Teaching/Resources/COMS22201/nielson.pdf
-
 n_val::Num -> Z
 n_val n = n
 
@@ -76,7 +68,6 @@ updateP_m' (ENVP envp_m) (pname, stm) = ENVP (\pname' -> if (pname == pname') th
 updateP_m::EnvP_m->DecP->EnvP_m
 updateP_m envp_m decp = foldl updateP_m' envp_m decp
 
--- Introduce 'current environment' variable?
 
 ns_stm_m :: Config_m -> Config_m
 ns_stm_m (Inter_m (Skip) s  envp_m)          =   Final_m s  envp_m
@@ -112,43 +103,39 @@ ns_stm_m (Inter_m (Call pname) s (ENVP envp_m) )    =    ns_stm_m(Inter_m (p_stm
                                                     (p_stm, p_environment)             = envp_m pname                        -- Get & use statically defined body of P
                                                     envp_recurse      = updateP_m' (p_environment) (pname, p_stm)  -- When calling P, update its environment so it recognises itself
 
-s_mixed::Stm->Config_m->Config_m
-s_mixed   stm (Final_m s envp) = Final_m s' envp'
-          where
-          Final_m s'  envp' = ns_stm_m (Inter_m stm s envp)
+----------------------------------------------------------------------------------
+------------------------------- * MIXED * ----------------------------------------
 
-s_test1_m = s_testx_m(s_mixed exercise_2_37 (Final_m def_state_m def_envp_m))
-s_test2_m = s_testy_m(s_mixed exercise_2_37 (Final_m def_state_m def_envp_m))
-s_test3_m = s_testz_m(s_mixed exercise_2_37 (Final_m def_state_m def_envp_m))
-s_testx_m::Config_m -> Integer
-s_testx_m (Inter_m stm state envp_m) = state "x"
-s_testx_m (Final_m state envp_m) = state "x"
-s_testy_m::Config_m -> Integer
-s_testy_m (Inter_m stm state envp) = state "y"
-s_testy_m (Final_m state envp) = state "y"
-s_testz_m::Config_m -> Integer
-s_testz_m (Inter_m stm state envp) = state "z"
-s_testz_m (Final_m state envp) = state "z"
+s_mixed::Stm->State->State
+s_mixed stm state = final_state
+        where
+        Final_m final_state final_envp = ns_stm_m (Inter_m stm state default_envp_m)
 
+var_state_m::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
+var_state_m v stm = final_state v
+          where final_state = s_mixed stm default_state_m
 
-s1 :: Stm
-s1 = Block [("X", N 5)] [("foo", Skip)] Skip
---Scope Test Page 53
-s1' :: Stm
-s1' = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
+----------------------------------------------------------------------------------
+----------------------------- * TEST STATEMENTS * --------------------------------
 
-s1'' :: Stm
-s1'' = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp (Call "fac") (Ass "y" (Mult (V "z") (V "y"))) ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+scope_test :: Stm
+scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
-s1''' :: Stm
-s1''' = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+fac_recurse :: Stm
+fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+
+fac_while:: Stm
+fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+
 exercise_2_37 :: Stm
 exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
 
-def_state_m :: State
-def_state_m "x" = 5
-def_state_m _ = 0
+----------------------------------------------------------------------------------
+------------------------- * MIXED DEFAULT CONFIGURATION * -----------------------
 
+default_state_m :: State
+default_state_m "x" = 5
+default_state_m _ = -1
 
-def_envp_m :: EnvP_m
-def_envp_m = ENVP (\pname -> (Skip, def_envp_m))
+default_envp_m :: EnvP_m
+default_envp_m = ENVP (\pname -> (Skip, default_envp_m))
