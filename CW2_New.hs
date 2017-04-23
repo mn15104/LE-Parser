@@ -3,52 +3,38 @@ import Prelude hiding (Num)
 import System.IO
 import Control.Monad
 import Control.Applicative hiding ((<|>), many)
-import Text.ParserCombinators.Parsec hiding (State)
+import qualified Text.ParserCombinators.Parsec as Parsec
+import Text.ParserCombinators.Parsec hiding (State, parse)
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 
 
-parse' :: String -> Stm
-parse' str =
-     case parse procParser "" str of
+parse :: String -> Stm
+parse str =
+       case Parsec.parse procParser "" str of
        Left e  -> error $ show e
        Right r -> r
+
+
+s_static::Stm->State->State
+s_static stm state = final_state
+           where (state', envv', loc', store') = analyse_stm stm (state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
+                 Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')           -- Execute program
+                 final_state = (\v -> store''(envv'' v))                                                                     -- Return new state
+
+s_mixed::Stm->State->State
+s_mixed stm state = final_state
+         where
+         Final_m final_state final_envp = ns_stm_m (Inter_m stm state default_envp_m)
 
 s_dynamic::Stm->State->State
 s_dynamic stm state = final_state
           where
           Final_d final_state final_envp = ns_stm_d (Inter_d stm state default_envp_d)
 
-s_mixed::Stm->State->State
-s_mixed stm state = final_state
-        where
-        Final_m final_state final_envp = ns_stm_m (Inter_m stm state default_envp_m)
-
-s_static::Stm->State->State
-s_static stm state = final_state
-          where (state', envv', loc', store') = analyse_stm stm (state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
-                Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')           -- Execute program
-                final_state = (\v -> store''(envv'' v))                                                                     -- Return new state
 
 
-
-
-------------------------------------------------------------------------------------------------------------
-------------------------------------- * DYNAMIC HELPER FUNCTIONS * ---------------------------------------
-
-
-var_state_d::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
-var_state_d v stm = final_state v
-          where final_state = s_dynamic stm default_state
-
-------------------------------------------------------------------------------------------------------------
--------------------------------------- * MIXED HELPER FUNCTIONS * ----------------------------------------
-
-
-var_state_m::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
-var_state_m v stm = final_state v
-          where final_state = s_mixed stm default_state
 
 
 -----------------------------------------------------------------------------------------------------------
@@ -66,7 +52,21 @@ var_location_st v stm = envv'' v
           where (state', envv', loc', store') = analyse_stm stm (default_state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
                 Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')
 
+------------------------------------------------------------------------------------------------------------
+-------------------------------------- * MIXED HELPER FUNCTIONS * ----------------------------------------
 
+
+var_state_m::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
+var_state_m v stm = final_state v
+          where final_state = s_mixed stm default_state
+
+------------------------------------------------------------------------------------------------------------
+------------------------------------- * DYNAMIC HELPER FUNCTIONS * ---------------------------------------
+
+
+var_state_d::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
+var_state_d v stm = final_state v
+          where final_state = s_dynamic stm default_state
 
 
 ----------------------------------------------------------------------------------
