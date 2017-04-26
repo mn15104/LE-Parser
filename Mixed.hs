@@ -49,7 +49,7 @@ type T = Bool
 type DecV  = [(Var,Aexp)]
 type DecP  = [(Pname,Stm)]
 type State = Var -> Z
-data EnvP_m = ENVP (Pname -> (Stm, EnvP_m))
+data EnvP_m = ENVP (Pname -> (Stm, EnvP_m, DecP))
 data Config_m   = Inter_m Stm State EnvP_m | Final_m State EnvP_m
 
 decVcontainsV :: [(Var, Aexp)] -> Var -> Bool
@@ -62,12 +62,15 @@ update' s (var, aexp) = (\var' -> if (var == var') then a_val aexp s else ( s va
 update::State->DecV->State
 update s decv = foldl update' s decv
 
-updateP_m'::EnvP_m->(Pname, Stm)->EnvP_m
-updateP_m' (ENVP envp_m) (pname, stm) = ENVP (\pname' -> if (pname == pname') then (stm, ENVP envp_m) else ( envp_m pname') )
+updateP_m'::EnvP_m->(Pname, Stm, DecP)->EnvP_m
+updateP_m' (ENVP envp_m) (pname, stm, decp) = ENVP (\pname' -> if (pname == pname') then (stm, ENVP envp_m, decp) else ( envp_m pname') )
 
 updateP_m::EnvP_m->DecP->EnvP_m
-updateP_m envp_m decp = foldl updateP_m' envp_m decp
+updateP_m envp_m decp = foldl updateP_m' envp_m decp'
+                        where decp' = append' decp
 
+append'::[(Pname, Stm)]->[(Pname, Stm, DecP)]
+append' decp = map (\(pname, stm)->(pname, stm, decp)) decp
 
 ns_stm_m :: Config_m -> Config_m
 ns_stm_m (Inter_m (Skip) s  envp_m)          =   Final_m s  envp_m
@@ -100,8 +103,8 @@ ns_stm_m (Inter_m (Block decv decp stm) s envp_m)   = Final_m s_restore envp_m''
 
 ns_stm_m (Inter_m (Call pname) s (ENVP envp_m) )    =    ns_stm_m(Inter_m (p_stm) s  (envp_recurse) )
                                                     where
-                                                    (p_stm, p_environment)             = envp_m pname                        -- Get & use statically defined body of P
-                                                    envp_recurse      = updateP_m' (p_environment) (pname, p_stm)  -- When calling P, update its environment so it recognises itself
+                                                    (p_stm, p_environment, p_dec)             = envp_m pname                        -- Get & use statically defined body of P
+                                                    envp_recurse      = updateP_m (p_environment) p_dec -- When calling P, update its environment so it recognises itself
 
 ----------------------------------------------------------------------------------
 ------------------------------- * MIXED * ----------------------------------------
@@ -117,6 +120,9 @@ var_state_m v stm = final_state v
 
 ----------------------------------------------------------------------------------
 ----------------------------- * TEST STATEMENTS * --------------------------------
+
+jamie_AST = Block [("x",N 5)] [("a",If (Neg (Le (V "x") (N 3))) (Comp (Ass "y" (Add (V "y") (N 1))) (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "b"))) Skip),("b",Comp (Ass "y" (Add (V "y") (N 100))) (Call "a"))] (Comp (Block [("x",N 6)] [("a",Ass "x" (N 50))] (Comp (Ass "y" (N 0)) (Comp (Call "b") (Ass "xinner" (V "x"))))) (Ass "xouter" (V "x")))
+
 
 scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
@@ -138,4 +144,4 @@ default_state_m "x" = 5
 default_state_m _ = -1
 
 default_envp_m :: EnvP_m
-default_envp_m = ENVP (\pname -> (Skip, default_envp_m))
+default_envp_m = ENVP (\pname -> (Skip, default_envp_m, []))

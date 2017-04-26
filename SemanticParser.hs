@@ -110,6 +110,8 @@ var_state_d v stm = final_state v
 ----------------------------------------------------------------------------------
 ----------------------------- * TEST STATEMENTS * --------------------------------
 
+mutrec = Block [("x",N 5)] [("a",Call "b"),("b",Ass "y" (Add (V "y") (N 100)))] (Block [("x",N 6)] [] (Comp (Ass "y" (N 0)) (Call "a")))
+
 scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 

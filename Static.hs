@@ -49,8 +49,10 @@ type Store = Loc -> Z     -- Mapping #2: Associates a variable value with a loca
 type DecV  = [(Var,Aexp)]
 type DecP  = [(Pname,Stm)]
 type State = Var -> Z
-data EnvP_st = ENVP_st (Pname -> (Stm, EnvV, EnvP_st))
+data EnvP_st = ENVP_st (Pname -> (Stm, EnvV, EnvP_st, DecP))
 data Config_st   = Inter_st Stm EnvV EnvP_st Loc Store  | Final_st EnvV EnvP_st Loc Store
+
+m = Block [("x",N 5)] [("a",Call "b"),("b",Comp (Ass "y" (Add (V "y") (N 100))) (Call "a"))] (Block [("x",N 6)] [] (Comp (Ass "y" (N 1)) (Call "a")))
 
 
 new :: Loc -> Loc
@@ -69,16 +71,21 @@ updateV_st' (Inter_st stm envv envp loc store ) (var, aexp) = Final_st envv' env
 updateV_st::Config_st->DecV->Config_st
 updateV_st config decv  = foldl updateV_st' config decv
 
-updateP_st'::Config_st->(Pname, Stm)->Config_st
-updateP_st' (Inter_st statement envv envp loc store ) (pname, stm) = Final_st envv envp' loc store
-                            where envp' = ENVP_st (\pname' ->  if (pname == pname') then (stm, envv, envp') else ( old_envp pname') )
+
+updateP_st'::Config_st->(Pname, Stm, DecP)->Config_st
+updateP_st' (Inter_st statement envv envp loc store ) (pname, stm, decp) = Final_st envv envp' loc store
+                            where envp' = ENVP_st (\pname' ->  if (pname == pname') then (stm, envv, envp', decp) else ( old_envp pname') )
                                   ENVP_st old_envp = envp
-updateP_st' (Final_st envv envp loc store ) (pname, stm) = Final_st envv envp' loc store
-                            where envp' = ENVP_st (\pname' ->  if (pname == pname') then (stm, envv, envp') else ( old_envp pname') )
+updateP_st' (Final_st envv envp loc store ) (pname, stm, decp) = Final_st envv envp' loc store
+                            where envp' = ENVP_st (\pname' ->  if (pname == pname') then (stm, envv, envp', decp) else ( old_envp pname') )
                                   ENVP_st old_envp = envp
 
 updateP_st::Config_st->DecP->Config_st
-updateP_st config decp = foldl updateP_st' config decp
+updateP_st config decp = foldl updateP_st' config decp'
+                        where decp' = append' decp
+
+append'::[(Pname, Stm)]->[(Pname, Stm, DecP)]
+append' decp = map (\(pname, stm)->(pname, stm, decp)) decp
 
 ns_stm_st :: Config_st -> Config_st
 ns_stm_st (Inter_st (Skip) envv envp loc store )           =   Final_st envv envp loc store
@@ -112,12 +119,9 @@ ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store )   = Final_st env
                                                               Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm envv' envp' loc' store' )
 
 ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    Final_st envv envp'' loc'' store''
-                                                       where (stm', envv', envp') = envp pname                      -- Get & use local environment
-                                                             Final_st envvr envp_recurse locr storer  = updateP_st' (Final_st envv' envp' loc store ) (pname, stm') -- Update P's procedure environment to include itself
+                                                       where (stm', envv', envp', decp') = envp pname                      -- Get & use local environment
+                                                             Final_st envvr envp_recurse locr storer  = updateP_st (Final_st envv' envp' loc store ) decp' -- Update P's procedure environment to include itself
                                                              Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm' envv' envp_recurse loc store )
-
-
-
 
 ----------------------------------------------------------------------------------------
 ----------------------------- * STATIC: SYNTACTIC ANALYSIS * --------------------------------
@@ -220,6 +224,9 @@ var_location_st v stm = envv'' v
 ----------------------------------------------------------------------------------
 ----------------------------- * TEST STATEMENTS * --------------------------------
 
+jamie_AST = Block [("x",N 5)] [("a",If (Neg (Le (V "x") (N 3))) (Comp (Ass "y" (Add (V "y") (N 1))) (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "b"))) Skip),("b",Comp (Ass "y" (Add (V "y") (N 100))) (Call "a"))] (Comp (Block [("x",N 6)] [("a",Ass "x" (N 50))] (Comp (Ass "y" (N 0)) (Comp (Call "b") (Ass "xinner" (V "x"))))) (Ass "xouter" (V "x")))
+
+
 scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
@@ -241,7 +248,7 @@ default_envv_st :: EnvV
 default_envv_st _   = -1
 
 default_envp_st :: EnvP_st
-default_envp_st = ENVP_st (\pname -> (Skip, default_envv_st, default_envp_st))
+default_envp_st = ENVP_st (\pname -> (Skip, default_envv_st, default_envp_st, []))
 
 default_loc_st :: Loc
 default_loc_st = 0
