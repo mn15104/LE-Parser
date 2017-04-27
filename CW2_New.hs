@@ -373,7 +373,7 @@ ns_stm_d (Inter_d (Block decv decp stm) s envp)   = Final_d s_restore envp
                                               Final_d s'' envp''  = ns_stm_d(Inter_d stm s' envp')            -- Execute process and return any (dynamically) updated processes and variables
                                               s_restore = (\v -> if decVcontainsV decv v then s v else s'' v ) -- Ignore local variable declarations in Block Process
 
-ns_stm_d (Inter_d (Call pname) s envp)      =     Final_d s' envp'
+ns_stm_d (Inter_d (Call pname) s envp)      =     Final_d s' envp
                                               where
                                               Final_d s' envp'  = ns_stm_d(Inter_d (envp pname) s envp)
 
