@@ -72,37 +72,29 @@ var_state_d v stm = final_state v
 ----------------------------------------------------------------------------------
 ----------------------------- * TEST STATEMENTS * --------------------------------
 
-fac_loop_string = "/*fac_loop (p.23)*/\ny:=1;\nwhile !(x=1) do (\n y:=y*x;\n x:=x-1\n)"
-
-m = "begin var x := 5; proc a is (call b); proc b is (y := y + 100); begin var x := 6; y := 0; call a end end "
-m1 = Block [("x",N 5)] [("a",Call "b"),("b",Ass "y" (Add (V "y") (N 100)))] (Block [("x",N 6)] [] (Comp (Ass "y" (N 0)) (Call "a")))
-
+test = "begin proc a is (x:=10); begin proc a is (x:=20); skip end; call a end"
+test_ast = Block [] [("a",Ass "x" (N 10))] (Comp (Block [] [("a",Ass "x" (N 20))] Skip) (Call "a"))
 
 jamie_string = "begin var x := 5; proc a is (if !(x <= 3) then y := y + 1; x := x - 1; call b else skip);proc b is (y := y + 100; call a); begin var x := 6; proc a is ( x := 50 ); y := 0; call b; xinner := x end; xouter := x end"
 jamie_AST = Block [("x",N 5)] [("a",If (Neg (Le (V "x") (N 3))) (Comp (Ass "y" (Add (V "y") (N 1))) (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "b"))) Skip),("b",Comp (Ass "y" (Add (V "y") (N 100))) (Call "a"))] (Comp (Block [("x",N 6)] [("a",Ass "x" (N 50))] (Comp (Ass "y" (N 0)) (Comp (Call "b") (Ass "xinner" (V "x"))))) (Ass "xouter" (V "x")))
 
-scope_test :: Stm
 scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
 
-fac_recurse :: Stm
 fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
 
-fac_while:: Stm
 fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
 
-exercise_2_37 :: Stm
 exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
-
 
 
 -----------------------------------------------------------------------------------
 ------------------------------- * DEFAULT STATE  * --------------------------------
 
 default_state :: State
-default_state "x" = 7;
-default_state "y" = 8;
-default_state "z" = 9;
-default_state _ = 100;
+default_state "x" = 5;
+default_state "y" = 0;
+default_state "z" = 0;
+default_state _ = 0;
 
 ----------------------------------------------------------------------------------
 ------------------------- * STATIC DEFAULT CONFIGURATION * -----------------------
@@ -274,12 +266,12 @@ ns_stm_st (Inter_st (While bexp s1) envv envp loc store )
                                 Final_st envv'' envp'' loc'' store''  = ns_stm_st(Inter_st (While bexp s1) envv' envp' loc' store' )
 
 
-ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store )   = Final_st envv envp'' loc'' store''
+ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store )   = Final_st envv envp loc'' store''
                                                         where config' = updateV_st (Inter_st (Block decv decp stm) envv envp loc store ) decv  -- use local variables using decv
                                                               Final_st envv' envp' loc' store' = updateP_st config' decp        -- update environment procedure
                                                               Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm envv' envp' loc' store' )
 
-ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    Final_st envv envp'' loc'' store''
+ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    Final_st envv (ENVP_st envp) loc'' store''
                                                        where (stm', envv', envp', decp') = envp pname                      -- Get & use local environment
                                                              Final_st envvr envp_recurse locr storer  = updateP_st (Final_st envv' envp' loc store ) decp' -- Update P's procedure environment to include itself
                                                              Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm' envv' envp_recurse loc store )
@@ -320,7 +312,7 @@ ns_stm_m (Inter_m (While bexp s1) s envp_m)
                                 Final_m s' envp_m' = ns_stm_m(Inter_m s1 s envp_m)
                                 Final_m s'' envp_m'' = ns_stm_m(Inter_m (While bexp s1) s' envp_m')
 
-ns_stm_m (Inter_m (Block decv decp stm) s envp_m)   = Final_m s_restore envp_m''
+ns_stm_m (Inter_m (Block decv decp stm) s envp_m)   = Final_m s_restore envp_m
                                               where
                                               s'                     = update_state s decv          -- Update state mapping for P's local variables
                                               envp_m'                = updateP_m envp_m decp  -- Update procedure mapping for P's procedures
@@ -374,7 +366,7 @@ ns_stm_d (Inter_d (While bexp s1) s envp)
                                 Final_d s'  envp' = ns_stm_d(Inter_d s1 s envp)
                                 Final_d s''  envp'' = ns_stm_d(Inter_d (While bexp s1) s' envp')
 
-ns_stm_d (Inter_d (Block decv decp stm) s envp)   = Final_d s_restore envp''
+ns_stm_d (Inter_d (Block decv decp stm) s envp)   = Final_d s_restore envp
                                               where
                                               s'                = update_state s decv       -- Update state mapping for P's local variables
                                               envp'             = updateP_d envp decp -- Update procedure mapping for P's procedures
