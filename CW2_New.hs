@@ -35,7 +35,7 @@ scope_stm = parse " \
 
 -- x=11
 recursive_stm = parse "\
-\begin var x:=1;\
+\begin \
   \proc fac1 is begin \
     \if x<=10 then \
       \x:=x+1; \
