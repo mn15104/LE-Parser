@@ -9,6 +9,79 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 
+parse :: String -> Stm
+parse str =
+       case Parsec.parse procParser "" str of
+       Left e  -> error $ show e
+       Right r -> r
+
+
+s_static::Stm->State->State
+s_static stm state = final_state
+           where (state', envv', loc', store') = analyse_stm stm (state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
+                 Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')           -- Execute program
+                 final_state = (\v -> store''(envv'' v))                                                                     -- Return new state
+
+s_mixed::Stm->State->State
+s_mixed stm state = final_state
+         where
+         Final_m final_state final_envp = ns_stm_m (Inter_m stm state default_envp_m)
+
+s_dynamic::Stm->State->State
+s_dynamic stm state = final_state
+          where
+          Final_d final_state final_envp = ns_stm_d (Inter_d stm state default_envp_d)
+
+-----------------------------------------------------------------------------------------------------------
+------------------------------------- * STATIC HELPER FUNCTIONS * -----------------------------------------
+
+s_static'::Stm->Config_st->Config_st  -- Configuration transformer
+s_static' stm (Final_st envv envp loc store ) = ns_stm_st (Inter_st stm envv envp loc store )
+
+var_state_st::Var -> Stm -> Integer      -- Variable state tester  -- Using Default Config
+var_state_st v stm = final_state v
+          where final_state = s_static stm default_state
+
+var_location_st::Var -> Stm -> Integer    -- Variable location tester  -- Using Default Config
+var_location_st v stm = envv'' v
+          where (state', envv', loc', store') = analyse_stm stm (default_state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
+                Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')
+
+------------------------------------------------------------------------------------------------------------
+-------------------------------------- * MIXED HELPER FUNCTIONS * ----------------------------------------
+
+
+var_state_m::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
+var_state_m v stm = final_state v
+          where final_state = s_mixed stm default_state
+
+------------------------------------------------------------------------------------------------------------
+------------------------------------- * DYNAMIC HELPER FUNCTIONS * ---------------------------------------
+
+
+var_state_d::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
+var_state_d v stm = final_state v
+          where final_state = s_dynamic stm default_state
+
+
+----------------------------------------------------------------------------------
+----------------------------- * TEST STATEMENTS * --------------------------------
+
+test = "begin proc a is (x:=10); begin proc a is (x:=20); skip end; call a end"
+test_ast = Block [] [("a",Ass "x" (N 10))] (Comp (Block [] [("a",Ass "x" (N 20))] Skip) (Call "a"))
+
+jamie_string = "begin var x := 5; proc a is (if !(x <= 3) then y := y + 1; x := x - 1; call b else skip);proc b is (y := y + 100; call a); begin var x := 6; proc a is ( x := 50 ); y := 0; call b; xinner := x end; xouter := x end"
+jamie_AST = Block [("x",N 5)] [("a",If (Neg (Le (V "x") (N 3))) (Comp (Ass "y" (Add (V "y") (N 1))) (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "b"))) Skip),("b",Comp (Ass "y" (Add (V "y") (N 100))) (Call "a"))] (Comp (Block [("x",N 6)] [("a",Ass "x" (N 50))] (Comp (Ass "y" (N 0)) (Comp (Call "b") (Ass "xinner" (V "x"))))) (Ass "xouter" (V "x")))
+
+scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
+
+fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
+
+fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
+
+exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
+
+
 -- Utils --
 test_state :: State
 test_state _ = 0
@@ -91,83 +164,6 @@ main = do
   print test_static_scope
   print test_static_recusion
   print test_static_mutal_recusion
-
-parse :: String -> Stm
-parse str =
-       case Parsec.parse procParser "" str of
-       Left e  -> error $ show e
-       Right r -> r
-
-
-s_static::Stm->State->State
-s_static stm state = final_state
-           where (state', envv', loc', store') = analyse_stm stm (state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
-                 Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')           -- Execute program
-                 final_state = (\v -> store''(envv'' v))                                                                     -- Return new state
-
-s_mixed::Stm->State->State
-s_mixed stm state = final_state
-         where
-         Final_m final_state final_envp = ns_stm_m (Inter_m stm state default_envp_m)
-
-s_dynamic::Stm->State->State
-s_dynamic stm state = final_state
-          where
-          Final_d final_state final_envp = ns_stm_d (Inter_d stm state default_envp_d)
-
-
-
-
-
------------------------------------------------------------------------------------------------------------
-------------------------------------- * STATIC HELPER FUNCTIONS * -----------------------------------------
-
-s_static'::Stm->Config_st->Config_st  -- Configuration transformer
-s_static' stm (Final_st envv envp loc store ) = ns_stm_st (Inter_st stm envv envp loc store )
-
-var_state_st::Var -> Stm -> Integer      -- Variable state tester  -- Using Default Config
-var_state_st v stm = final_state v
-          where final_state = s_static stm default_state
-
-var_location_st::Var -> Stm -> Integer    -- Variable location tester  -- Using Default Config
-var_location_st v stm = envv'' v
-          where (state', envv', loc', store') = analyse_stm stm (default_state, default_envv_st, default_loc_st, default_store_st)  -- Get initial configuration from state
-                Final_st envv'' envp'' loc'' store'' = s_static' stm (Final_st envv' default_envp_st loc' store')
-
-------------------------------------------------------------------------------------------------------------
--------------------------------------- * MIXED HELPER FUNCTIONS * ----------------------------------------
-
-
-var_state_m::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
-var_state_m v stm = final_state v
-          where final_state = s_mixed stm default_state
-
-------------------------------------------------------------------------------------------------------------
-------------------------------------- * DYNAMIC HELPER FUNCTIONS * ---------------------------------------
-
-
-var_state_d::Var -> Stm -> Integer      -- Dynamic variable state tester; using Default Config
-var_state_d v stm = final_state v
-          where final_state = s_dynamic stm default_state
-
-
-----------------------------------------------------------------------------------
------------------------------ * TEST STATEMENTS * --------------------------------
-
-test = "begin proc a is (x:=10); begin proc a is (x:=20); skip end; call a end"
-test_ast = Block [] [("a",Ass "x" (N 10))] (Comp (Block [] [("a",Ass "x" (N 20))] Skip) (Call "a"))
-
-jamie_string = "begin var x := 5; proc a is (if !(x <= 3) then y := y + 1; x := x - 1; call b else skip);proc b is (y := y + 100; call a); begin var x := 6; proc a is ( x := 50 ); y := 0; call b; xinner := x end; xouter := x end"
-jamie_AST = Block [("x",N 5)] [("a",If (Neg (Le (V "x") (N 3))) (Comp (Ass "y" (Add (V "y") (N 1))) (Comp (Ass "x" (Sub (V "x") (N 1))) (Call "b"))) Skip),("b",Comp (Ass "y" (Add (V "y") (N 100))) (Call "a"))] (Comp (Block [("x",N 6)] [("a",Ass "x" (N 50))] (Comp (Ass "y" (N 0)) (Comp (Call "b") (Ass "xinner" (V "x"))))) (Ass "xouter" (V "x")))
-
-scope_test = Block [("x",N 0)] [("p",Ass "x" (Mult (V "x") (N 2))),("q",Call "p")] (Block [("x",N 5)] [("p",Ass "x" (Add (V "x") (N 1)))] (Comp (Call "q") (Ass "y" (V "x"))))
-
-fac_recurse = Block [] [("fac",Block [("z",V "x")] [] (If (Eq (V "x") (N 1)) Skip (Comp (Ass "x" (Sub (V "x") (N 1))) (Comp(Call "fac")(Ass "y" (Mult (V "z") (V "y")))   ))))] (Comp (Ass "y" (N 1)) (Call "fac"))
-
-fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" (Mult (V "y") (V "x"))) (Ass "x" (Sub (V "x") (N 1)))))
-
-exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
-
 
 -----------------------------------------------------------------------------------
 ------------------------------- * DEFAULT STATE  * --------------------------------
