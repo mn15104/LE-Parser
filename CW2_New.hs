@@ -9,6 +9,88 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 
+-- Utils --
+test_state :: State
+test_state _ = 0
+
+test_state_x_7 :: State
+test_state_x_7 "x" = 7
+test_state_x_7 _ = 0
+
+test_state_x_14 :: State
+test_state_x_14 "x" = 14
+test_state_x_14 _ = 0
+
+-- static: y=5; dynamic: y=6; mixed: y=10
+scope_stm = parse " \
+\ begin var x:= 0;\
+  \ proc p is x:=x*2; \
+  \ proc q is call p; \
+  \ begin var x := 5; \
+    \ proc p is x := x+1; \
+    \ call q;\
+    \ y := x \
+  \ end \
+\ end"
+
+-- x=11
+recursive_stm = parse "\
+\begin var x:=1;\
+  \proc fac1 is begin \
+    \if x<=10 then \
+      \x:=x+1; \
+      \call fac1 \
+    \else \
+      \skip \
+  \end; \
+  \call fac1 \
+\end"
+
+
+-- Even varible should be 1 if x is even else 0
+-- Note load x via a state
+mutal_recursion_stm = parse "\
+\begin \
+  \proc even is begin \
+    \if x=0 then \
+        \even:=1 \
+    \else \
+        \x:=x-1; \
+        \call odd \
+  \end; \
+  \proc odd is begin \
+    \if x=0 then \
+        \even:=0 \
+    \else \
+        \x:=x-1; \
+        \call even \
+    \end; \
+    \call even \
+\end"
+
+test_dynamic_scope = (s_dynamic scope_stm test_state) "y" == 6
+test_dynamic_recusion = (s_dynamic recursive_stm test_state) "x" == 11
+test_dynamic_mutal_recusion = ((s_dynamic mutal_recursion_stm test_state_x_7) "even" == 0) && ((s_dynamic mutal_recursion_stm test_state_x_14) "even" == 1)
+
+test_mixed_scope = (s_mixed scope_stm test_state) "y" == 10
+test_mixed_recusion = (s_mixed recursive_stm test_state) "x" == 11
+test_mixed_mutal_recusion = ((s_mixed mutal_recursion_stm test_state_x_7) "even" == 0) && ((s_mixed mutal_recursion_stm test_state_x_14) "even" == 1)
+
+test_static_scope = (s_static scope_stm test_state) "y" == 5
+test_static_recusion = (s_static recursive_stm test_state) "x" == 11
+test_static_mutal_recusion = ((s_static mutal_recursion_stm test_state_x_7) "even" == 0) && ((s_static mutal_recursion_stm test_state_x_14) "even" == 1)
+
+
+main = do
+  print test_dynamic_scope
+  print test_dynamic_recusion
+  print test_dynamic_mutal_recusion
+  print test_mixed_scope
+  print test_mixed_recusion
+  print test_mixed_mutal_recusion
+  print test_static_scope
+  print test_static_recusion
+  print test_static_mutal_recusion
 
 parse :: String -> Stm
 parse str =
@@ -219,10 +301,17 @@ updateV_st' (Inter_st stm envv envp loc store ) (var, aexp) = Final_st envv' env
                                   newstore = (\loc' -> if (loc == loc') -- update global store to hold the aexp using the original envv - e.g. x := x + 1, we have to evaluate the RHS x with the original envv
                                                             then a_val_static aexp (Inter_st stm envv envp loc store )
                                                             else store loc')
-
+updateV_st' (Final_st envv envp loc store ) (var, aexp) = Final_st envv' envp nextloc newstore
+                            where nextloc = new loc;                    -- inside current procedure A
+                                  envv' = (\var' -> if (var == var')    -- update current environment's variable to location mapping -- difference between decv and assign, i.e. updateV_st and update, only decv is static inside a procedure
+                                                    then loc            -- variables inside a begin decv s end block are static to it
+                                                    else ( envv var' ))
+                                  newstore = (\loc' -> if (loc == loc') -- update global store to hold the aexp using the original envv - e.g. x := x + 1, we have to evaluate the RHS x with the original envv
+                                                            then a_val_static aexp (Final_st envv envp loc store )
+                                                            else store loc')
 updateV_st::Config_st->DecV->Config_st
-updateV_st config decv  = foldl updateV_st' config decv
-
+updateV_st (Final_st envv envp loc store ) decv  = if null decv then (Final_st envv envp loc store ) else foldl updateV_st' (Final_st envv envp loc store ) decv
+updateV_st (Inter_st stm envv envp loc store ) decv  = if null decv then (Final_st envv envp loc store )  else foldl updateV_st' (Final_st envv envp loc store )  decv
 
 updateP_st'::Config_st->(Pname, Stm, DecP)->Config_st
 updateP_st' (Inter_st statement envv envp loc store ) (pname, stm, decp) = Final_st envv envp' loc store
@@ -233,8 +322,13 @@ updateP_st' (Final_st envv envp loc store ) (pname, stm, decp) = Final_st envv e
                                   ENVP_st old_envp = envp
 
 updateP_st::Config_st->DecP->Config_st
-updateP_st config decp = foldl updateP_st' config decp'
-                        where decp' = append' decp
+updateP_st  (Final_st envv envp loc store ) decp = if null decp then  (Final_st envv envp loc store ) else
+                                                    foldl updateP_st'  (Final_st envv envp loc store ) decp'
+                                                    where decp' = append' decp
+
+updateP_st  (Inter_st stm envv envp loc store ) decp = if null decp then  (Final_st envv envp loc store ) else
+                                                        foldl updateP_st'  (Final_st envv envp loc store ) decp'
+                                                        where decp' = append' decp
 
 append'::[(Pname, Stm)]->[(Pname, Stm, DecP)]
 append' decp = map (\(pname, stm)->(pname, stm, decp)) decp
@@ -266,10 +360,10 @@ ns_stm_st (Inter_st (While bexp s1) envv envp loc store )
                                 Final_st envv'' envp'' loc'' store''  = ns_stm_st(Inter_st (While bexp s1) envv' envp' loc' store' )
 
 
-ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store )   = Final_st envv envp loc'' store''
-                                                        where config' = updateV_st (Inter_st (Block decv decp stm) envv envp loc store ) decv  -- use local variables using decv
-                                                              Final_st envv' envp' loc' store' = updateP_st config' decp        -- update environment procedure
-                                                              Final_st envv'' envp'' loc'' store'' = ns_stm_st(Inter_st stm envv' envp' loc' store' )
+ns_stm_st (Inter_st (Block decv decp stm) envv envp loc store )   = Final_st envv envp loc''' store'''
+                                                        where Final_st envv' envp' loc' store' = updateV_st (Inter_st (Block decv decp stm) envv envp loc store ) decv  -- use local variables using decv
+                                                              Final_st envv'' envp'' loc'' store'' = updateP_st (Final_st envv' envp' loc' store') decp        -- update environment procedure
+                                                              Final_st envv''' envp''' loc''' store''' = ns_stm_st(Inter_st stm envv'' envp'' loc'' store'' )
 
 ns_stm_st (Inter_st (Call pname) envv (ENVP_st envp) loc store )    =    Final_st envv (ENVP_st envp) loc'' store''
                                                        where (stm', envv', envp', decp') = envp pname                      -- Get & use local environment
@@ -411,6 +505,7 @@ b_val (Le a1 a2) s
 a_val_static::Aexp->Config_st->Z
 a_val_static (N n) config        = n_val(n)
 a_val_static (V v) (Inter_st stm envv envp loc store) = store (envv v)          -- if global variable, evaluate using state
+a_val_static (V v) (Final_st envv envp loc store) = store (envv v)
 a_val_static (Mult a1 a2) config = a_val_static(a1)config * a_val_static(a2)config
 a_val_static (Add a1 a2)  config = a_val_static(a1)config + a_val_static(a2)config
 a_val_static (Sub a1 a2)  config = a_val_static(a1)config - a_val_static(a2)config
