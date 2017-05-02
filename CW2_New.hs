@@ -81,7 +81,6 @@ fac_while = Comp (Ass "y" (N 1)) (While (Neg (Eq (V "x") (N 1))) (Comp (Ass "y" 
 
 exercise_2_37 = Block [("y",N 1)] [] (Comp (Ass "x" (N 1)) (Comp (Block [("x",N 2)] [] (Ass "y" (Add (V "x") (N 1)))) (Ass "x" (Add (V "y") (V "x")))))
 
-
 -- Utils --
 test_state :: State
 test_state _ = 0
@@ -169,9 +168,6 @@ main = do
 ------------------------------- * DEFAULT STATE  * --------------------------------
 
 default_state :: State
-default_state "x" = 5;
-default_state "y" = 0;
-default_state "z" = 0;
 default_state _ = 0;
 
 ----------------------------------------------------------------------------------
@@ -202,8 +198,6 @@ default_envp_m = ENVP (\pname -> (Skip, default_envp_m, []))
 
 default_envp_d :: EnvP_d
 default_envp_d _ = Skip
-
-
 
 ----------------------------------------------------------------------------------------------------------
 ---------------------------------------- * STATIC: AST ANALYSER * ----------------------------------------
